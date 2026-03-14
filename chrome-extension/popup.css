@@ -22,17 +22,23 @@ header{text-align:center;margin-bottom:18px}
 }
 .divider{border:none;border-top:1px solid #2a2a32;margin:16px 0}
 
-/* Language chips */
-.lang-options{display:flex;gap:5px;flex-wrap:wrap}
-.lang-chip{
-  display:flex;align-items:center;gap:5px;
-  padding:6px 12px;border:1.5px solid #2a2a32;border-radius:100px;
-  background:#16161a;color:#72717a;cursor:pointer;
-  font-size:0.72rem;font-weight:500;font-family:inherit;transition:all .2s ease;
+/* Direction row */
+.direction-row{display:flex;align-items:center;gap:6px}
+.lang-select{
+  flex:1;padding:8px 10px;
+  background:#16161a;border:1px solid #2a2a32;border-radius:8px;
+  color:#e8e6e3;font-size:12px;font-family:inherit;
+  outline:none;cursor:pointer;transition:border-color .2s ease;
+  appearance:auto;
 }
-.lang-chip:hover{background:#1e1e24;color:#e8e6e3}
-.lang-chip.active{color:#e8e6e3;border-color:#4ecdc4;box-shadow:0 2px 12px rgba(78,205,196,0.2)}
-.dot{width:5px;height:5px;border-radius:50%;display:inline-block}
+.lang-select:focus{border-color:#4ecdc4}
+.lang-select.full{flex:none;width:100%}
+.arrow{color:#72717a;font-size:14px;flex-shrink:0}
+.swap-btn{
+  padding:4px 8px;background:none;border:1px solid #2a2a32;border-radius:6px;
+  color:#72717a;cursor:pointer;font-size:14px;flex-shrink:0;transition:all .15s ease;
+}
+.swap-btn:hover{background:#1e1e24;color:#e8e6e3;border-color:#3a3a44}
 
 /* Inputs */
 .text-input{

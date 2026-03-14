@@ -19,11 +19,12 @@ const CODE_TO_NAME = {
 // ═══════════════════════════════════════════
 // TRANSLATION API
 // ═══════════════════════════════════════════
-async function translateText(text, targetKey) {
+async function translateText(text, targetKey, sourceKey) {
   const tl = LANG[targetKey]?.code || 'ko';
+  const sl = (!sourceKey || sourceKey === 'auto') ? 'auto' : (LANG[sourceKey]?.code || 'auto');
 
   const url = 'https://translate.googleapis.com/translate_a/single'
-    + '?client=gtx&sl=auto&tl=' + encodeURIComponent(tl)
+    + '?client=gtx&sl=' + encodeURIComponent(sl) + '&tl=' + encodeURIComponent(tl)
     + '&dt=t&q=' + encodeURIComponent(text);
 
   const res = await fetch(url);
@@ -74,11 +75,12 @@ chrome.commands.onCommand.addListener(async (command) => {
     }
 
     // Get user settings
-    const settings = await chrome.storage.sync.get(['targetLang']);
+    const settings = await chrome.storage.sync.get(['sourceLang', 'targetLang']);
     const targetLang = settings.targetLang || 'ko';
+    const sourceLang = settings.sourceLang || 'auto';
 
     // Translate
-    const result = await translateText(response.text, targetLang);
+    const result = await translateText(response.text, targetLang, sourceLang);
 
     // Save directly to Obsidian from the current page context.
     chrome.tabs.sendMessage(tab.id, { action: 'saveTranslationToObsidian', data: result });
@@ -106,8 +108,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'translate') {
     (async () => {
       try {
-        const settings = await chrome.storage.sync.get(['targetLang']);
-        const result = await translateText(msg.text, settings.targetLang || 'ko');
+        const settings = await chrome.storage.sync.get(['sourceLang', 'targetLang']);
+        const sl = msg.sourceLang || settings.sourceLang || 'auto';
+        const tl = msg.targetLang || settings.targetLang || 'ko';
+        const result = await translateText(msg.text, tl, sl);
         sendResponse({ data: result });
       } catch (err) {
         sendResponse({ error: err.message });

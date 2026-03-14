@@ -2,43 +2,39 @@
 // POPUP — Settings + Quick Translate
 // ═══════════════════════════════════════════
 
-const LANG_NAMES = {
-  ko: '한국어', en: 'English', jp: '日本語', cn: '中文', de: 'Deutsch'
-};
+const SETTINGS_KEYS = ['sourceLang', 'targetLang', 'obsidianVault', 'archiveBase', 'archiveLang'];
 
 // ── Load saved settings ──────────────────
-chrome.storage.sync.get(['targetLang', 'obsidianVault', 'archiveBase'], (s) => {
-  const lang = s.targetLang || 'ko';
-  setActiveChip(lang);
-  document.getElementById('vaultName').value = s.obsidianVault || '';
+chrome.storage.sync.get(SETTINGS_KEYS, (s) => {
+  document.getElementById('sourceLang').value  = s.sourceLang  || 'auto';
+  document.getElementById('targetLang').value  = s.targetLang  || 'ko';
+  document.getElementById('vaultName').value   = s.obsidianVault || '';
   document.getElementById('archiveBase').value = s.archiveBase || '4. Archive';
+  document.getElementById('archiveLang').value = s.archiveLang || 'auto';
   updatePathPreview();
 });
 
-// ── Language chip selection ──────────────
-document.getElementById('langOptions').addEventListener('click', (e) => {
-  const chip = e.target.closest('.lang-chip');
-  if (!chip) return;
-  setActiveChip(chip.dataset.lang);
+// ── Swap source ↔ target ─────────────────
+document.getElementById('swapBtn').addEventListener('click', () => {
+  const src = document.getElementById('sourceLang');
+  const tgt = document.getElementById('targetLang');
+
+  // Can't swap if source is auto
+  if (src.value === 'auto') return;
+
+  const tmp = src.value;
+  src.value = tgt.value;
+  tgt.value = tmp;
 });
-
-function setActiveChip(lang) {
-  document.querySelectorAll('.lang-chip').forEach((c) => {
-    c.classList.toggle('active', c.dataset.lang === lang);
-  });
-}
-
-function getSelectedLang() {
-  const active = document.querySelector('.lang-chip.active');
-  return active ? active.dataset.lang : 'ko';
-}
 
 // ── Save settings ────────────────────────
 document.getElementById('saveSettings').addEventListener('click', () => {
   chrome.storage.sync.set({
-    targetLang:    getSelectedLang(),
+    sourceLang:    document.getElementById('sourceLang').value,
+    targetLang:    document.getElementById('targetLang').value,
     obsidianVault: document.getElementById('vaultName').value.trim(),
-    archiveBase:   document.getElementById('archiveBase').value.trim() || '4. Archive'
+    archiveBase:   document.getElementById('archiveBase').value.trim() || '4. Archive',
+    archiveLang:   document.getElementById('archiveLang').value
   }, () => {
     const btn = document.getElementById('saveSettings');
     btn.textContent = 'Saved!';
@@ -48,12 +44,15 @@ document.getElementById('saveSettings').addEventListener('click', () => {
 
 // ── Path preview ─────────────────────────
 document.getElementById('archiveBase').addEventListener('input', updatePathPreview);
+document.getElementById('archiveLang').addEventListener('change', updatePathPreview);
 
 function updatePathPreview() {
   const base = document.getElementById('archiveBase').value.trim() || '4. Archive';
+  const lang = document.getElementById('archiveLang').value;
+  const folder = lang === 'auto' ? '{감지된 언어}' : lang;
   const today = new Date().toISOString().split('T')[0];
-  const el = document.getElementById('pathPreview');
-  el.textContent = base + '/영어/polygot/' + today + '/...';
+  document.getElementById('pathPreview').textContent =
+    base + '/' + folder + '/polygot/' + today + '/...';
 }
 
 // ── Quick Translate ──────────────────────
@@ -65,10 +64,15 @@ document.getElementById('translateBtn').addEventListener('click', async () => {
   btn.textContent = 'Translating...';
   btn.disabled = true;
 
+  const sourceLang = document.getElementById('sourceLang').value;
+  const targetLang = document.getElementById('targetLang').value;
+
   try {
     const response = await chrome.runtime.sendMessage({
       action: 'translate',
-      text: text
+      text,
+      sourceLang,
+      targetLang
     });
 
     const result = document.getElementById('resultArea');

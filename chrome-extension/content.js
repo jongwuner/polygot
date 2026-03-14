@@ -302,9 +302,10 @@ function slugifySite(url) {
 
 function saveToObsidian(data, options) {
   const opts = options || {};
-  chrome.storage.sync.get(['obsidianVault', 'archiveBase'], (settings) => {
+  chrome.storage.sync.get(['obsidianVault', 'archiveBase', 'archiveLang'], (settings) => {
     const vault = settings.obsidianVault || '';
     const base  = settings.archiveBase  || '4. Archive';
+    const archiveLang = settings.archiveLang || 'auto';
 
     if (!vault) {
       showPageToast('Set the Obsidian vault in the extension popup first.', true);
@@ -319,8 +320,10 @@ function saveToObsidian(data, options) {
     const pageTitle = document.title;
     const site = slugifySite(pageUrl);
 
-    // Determine folder by detected source language
-    const langFolder = SOURCE_LANG_FOLDER[data.sourceCode] || data.sourceLang || 'other';
+    // Determine folder: user-set or auto-detect from source language
+    const langFolder = (archiveLang !== 'auto')
+      ? archiveLang
+      : (SOURCE_LANG_FOLDER[data.sourceCode] || data.sourceLang || 'other');
 
     // File path: 4. Archive/영어/polygot/2026-03-14/2026-03-14_1430_example-com.md
     const filePath = base + '/' + langFolder + '/polygot/' + date + '/' + date + '_' + hhmm + '_' + site;
