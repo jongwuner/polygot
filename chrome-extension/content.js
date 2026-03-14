@@ -6,6 +6,43 @@
 let panelHost = null;
 let fabHost = null;
 
+function isInvalidatedContextError(err) {
+  const message = String(err?.message || err || '').toLowerCase();
+  return message.includes('extension context invalidated')
+    || message.includes('message port closed')
+    || message.includes('receiving end does not exist');
+}
+
+function getRefreshRequiredMessage() {
+  return 'Extension updated. Refresh this tab once and try again.';
+}
+
+function sendRuntimeMessageSafe(message, callback) {
+  try {
+    chrome.runtime.sendMessage(message, callback);
+    return true;
+  } catch (err) {
+    if (isInvalidatedContextError(err)) {
+      showPageToast(getRefreshRequiredMessage(), true);
+      return false;
+    }
+    throw err;
+  }
+}
+
+function getSyncStorageSafe(keys, callback) {
+  try {
+    chrome.storage.sync.get(keys, callback);
+    return true;
+  } catch (err) {
+    if (isInvalidatedContextError(err)) {
+      showPageToast(getRefreshRequiredMessage(), true);
+      return false;
+    }
+    throw err;
+  }
+}
+
 // ── Message listener ─────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'getSelection') {
@@ -119,14 +156,30 @@ function triggerTranslate() {
   removeFab();
   showPageToast('Translating...', false);
 
-  chrome.runtime.sendMessage({ action: 'translate', text }, (response) => {
-    if (response?.data) {
-      showPanel(response.data);
-      saveToObsidian(response.data, { silent: true });
-    } else {
-      showPageToast(response?.error || 'Translation failed.', true);
+  const sent = sendRuntimeMessageSafe({ action: 'translate', text }, (response) => {
+    const runtimeError = chrome.runtime.lastError;
+    if (runtimeError) {
+      if (isInvalidatedContextError(runtimeError)) {
+        showPageToast(getRefreshRequiredMessage(), true);
+      } else {
+        showPageToast(runtimeError.message || 'Translation failed.', true);
+      }
+      return;
+    }
+
+    try {
+      if (response?.data) {
+        showPanel(response.data);
+        saveToObsidian(response.data, { silent: true });
+      } else {
+        showPageToast(response?.error || 'Translation failed.', true);
+      }
+    } catch (err) {
+      console.error('[Polyglot]', err);
+      showPageToast(err?.message || 'Translation failed.', true);
     }
   });
+  if (!sent) return;
 }
 
 // ═══════════════════════════════════════════
@@ -211,7 +264,7 @@ function showPanel(data) {
   </div>
   <div class="pg-actions">
     <button class="pg-btn" id="pgCopy">Copy</button>
-    <button class="pg-btn primary" id="pgSave">Save to Obsidian</button>
+    <button class="pg-btn primary" id="pgSave">Queue Note</button>
   </div>
   <div class="pg-toast" id="pgToast"></div>
 </div>`;
@@ -227,7 +280,7 @@ function showPanel(data) {
 
   shadow.getElementById('pgSave').onclick = () => {
     saveToObsidian(data);
-    flashToast(shadow, 'Saved to Obsidian!');
+    flashToast(shadow, 'Queued!');
   };
 
   document.body.appendChild(panelHost);
@@ -292,73 +345,115 @@ function esc(str) {
   return d.innerHTML;
 }
 
-// ═══════════════════════════════════════════
-// OBSIDIAN SAVE
-// Path: {archiveBase}/{언어}/polygot/{YYYY-MM-DD}/{YYYY-MM-DD_HHmm_site}.md
-// ═══════════════════════════════════════════
-const SOURCE_LANG_FOLDER = {
-  'ko': '한국어', 'en': '영어', 'ja': '일본어',
-  'zh-CN': '중국어', 'zh-TW': '중국어', 'de': '독일어',
-  'fr': '프랑스어', 'es': '스페인어', 'ru': '러시아어',
-  'pt': '포르투갈어', 'it': '이탈리아어', 'ar': '아랍어'
-};
+function getObsidianBuilder() {
+  if (typeof PolyglotObsidian !== 'undefined' && PolyglotObsidian?.buildTranslationNote) {
+    return PolyglotObsidian;
+  }
 
-function slugifySite(url) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '').replace(/\./g, '-');
-  } catch { return 'unknown'; }
+  return {
+    buildTranslationNote(settings, data, context) {
+      const now = context?.now || new Date();
+      const date = now.toISOString().split('T')[0];
+      const hhmm = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+      const time = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      const base = String(settings.archiveBase || '4. Archive').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      const pageUrl = context?.pageUrl || '';
+      const pageTitle = context?.pageTitle || 'Polyglot Quick Translate';
+      const langMap = {
+        'ko': '한국어', 'en': '영어', 'ja': '일본어',
+        'zh-CN': '중국어', 'zh-TW': '중국어', 'de': '독일어',
+        'fr': '프랑스어', 'es': '스페인어', 'ru': '러시아어',
+        'pt': '포르투갈어', 'it': '이탈리아어', 'ar': '아랍어'
+      };
+
+      let site = 'quick-translate';
+      try {
+        site = new URL(pageUrl).hostname.replace(/^www\./, '').replace(/\./g, '-');
+      } catch (err) { /* ignore */ }
+
+      site = site
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'quick-translate';
+
+      const langFolder = settings.archiveLang && settings.archiveLang !== 'auto'
+        ? settings.archiveLang
+        : (langMap[data.sourceCode] || data.sourceLang || 'other');
+      const filePath = [base, langFolder, 'polygot', date, date + '_' + hhmm + '_' + site + '.md']
+        .filter(Boolean)
+        .join('/');
+
+      const lines = [
+        '#### ' + data.sourceLang + ' → ' + data.targetLang + '  |  ' + date + ' ' + time,
+        '',
+        '> ' + data.original.replace(/\n/g, '\n> '),
+        '',
+        data.translated
+      ];
+      if (data.pronunciation) {
+        const label = data.targetKey === 'cn' ? 'Pinyin' : 'Romaji';
+        lines.push('', '*' + label + ': ' + data.pronunciation + '*');
+      }
+      if (pageUrl) {
+        lines.push('', '*Source: [' + pageTitle + '](' + pageUrl + ')*');
+      } else {
+        lines.push('', '*Source: ' + pageTitle + '*');
+      }
+
+      const content = lines.join('\n');
+      return {
+        content: content,
+        date: date,
+        filePath: filePath,
+        langFolder: langFolder,
+        uri: 'obsidian://new?vault=' + encodeURIComponent(settings.obsidianVault)
+          + '&file=' + encodeURIComponent(filePath)
+          + '&content=' + encodeURIComponent(content)
+      };
+    }
+  };
 }
 
 function saveToObsidian(data, options) {
   const opts = options || {};
-  chrome.storage.sync.get(['obsidianVault', 'archiveBase', 'archiveLang'], (settings) => {
-    const vault = settings.obsidianVault || '';
-    const base  = settings.archiveBase  || '4. Archive';
-    const archiveLang = settings.archiveLang || 'auto';
+  const loaded = getSyncStorageSafe(['obsidianVault', 'archiveBase', 'archiveLang'], (settings) => {
+    const note = getObsidianBuilder().buildTranslationNote({
+      obsidianVault: settings.obsidianVault || '',
+      archiveBase: settings.archiveBase || '4. Archive',
+      archiveLang: settings.archiveLang || 'auto'
+    }, data, {
+      now: new Date(),
+      pageTitle: document.title,
+      pageUrl: window.location.href
+    });
 
-    if (!vault) {
-      showPageToast('Set the Obsidian vault in the extension popup first.', true);
-      return;
-    }
+    const sent = sendRuntimeMessageSafe({
+      action: 'queuePendingNote',
+      note: {
+        content: note.content,
+        filePath: note.filePath,
+        obsidianVault: settings.obsidianVault || '',
+        source: 'content-script'
+      }
+    }, (response) => {
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError) {
+        if (isInvalidatedContextError(runtimeError)) {
+          showPageToast(getRefreshRequiredMessage(), true);
+        } else {
+          showPageToast(runtimeError.message || 'Queue failed.', true);
+        }
+        return;
+      }
 
-    const now = new Date();
-    const date = now.toISOString().split('T')[0];
-    const hhmm = String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
-    const time = now.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
-    const pageUrl = window.location.href;
-    const pageTitle = document.title;
-    const site = slugifySite(pageUrl);
-
-    // Determine folder: user-set or auto-detect from source language
-    const langFolder = (archiveLang !== 'auto')
-      ? archiveLang
-      : (SOURCE_LANG_FOLDER[data.sourceCode] || data.sourceLang || 'other');
-
-    // File path: 4. Archive/영어/polygot/2026-03-14/2026-03-14_1430_example-com.md
-    const filePath = base + '/' + langFolder + '/polygot/' + date + '/' + date + '_' + hhmm + '_' + site;
-
-    const lines = [
-      '#### ' + data.sourceLang + ' → ' + data.targetLang + '  |  ' + date + ' ' + time,
-      '',
-      '> ' + data.original.replace(/\n/g, '\n> '),
-      '',
-      data.translated
-    ];
-    if (data.pronunciation) {
-      const label = data.targetKey === 'cn' ? 'Pinyin' : 'Romaji';
-      lines.push('', '*' + label + ': ' + data.pronunciation + '*');
-    }
-    lines.push('', '*Source: [' + pageTitle + '](' + pageUrl + ')*');
-    const content = lines.join('\n');
-
-    const uri = 'obsidian://new?vault=' + encodeURIComponent(vault)
-      + '&file=' + encodeURIComponent(filePath)
-      + '&content=' + encodeURIComponent(content);
-
-    if (opts.silent) {
-      showPageToast('Saved → ' + langFolder + '/polygot/' + date, false);
-    }
-
-    window.location.href = uri;
+      if (response?.data) {
+        showPageToast('Queued → ' + note.filePath, false);
+      } else {
+        showPageToast(response?.error || 'Queue failed.', true);
+      }
+    });
+    if (!sent) return;
   });
+  if (!loaded) return;
 }

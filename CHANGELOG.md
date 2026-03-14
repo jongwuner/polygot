@@ -2,6 +2,21 @@
 
 ## Chrome Extension
 
+### v1.5.0 — 2026-03-14
+**임시 큐 저장 방식**
+- 드래그 / 우클릭 / Alt+T / 팝업 번역 결과를 즉시 Obsidian으로 열지 않고 확장 내부 큐에 임시 저장
+- 팝업에 Pending Queue, `Save Next`, `Save All`, `Clear` 버튼 추가
+- 개별 번역은 `Queued → ...md` 형태로 경로만 표시
+- 필요할 때만 큐를 Obsidian으로 열 수 있도록 저장 타이밍 분리
+
+### v1.4.1 — 2026-03-14
+**컨텍스트 무효화 버그 픽스**
+- 확장 리로드 뒤 기존 탭에서 발생하던 `Extension context invalidated` 오류 방어
+- 드래그 후 `Translate` 클릭 시 `chrome.runtime.sendMessage(...)` 예외 처리 추가
+- content script에서 Obsidian note builder fallback 추가
+- background 메시지 경로에서 "탭 새로고침 필요" 상태를 일반 번역 실패와 구분
+- 팝업 / 드래그 / 우클릭 / 단축키 저장 경로를 `.md` 기준으로 정리
+
 ### v1.4.0 — 2026-03-14
 **발음 표시 + 우클릭 메뉴**
 - 중국어 번역 시 **Pinyin** 자동 표시 (예: nǐ hǎo shìjiè)
@@ -43,6 +58,12 @@
 ---
 
 ## Web App (index.html)
+
+### v1.3.0 — 2026-03-14
+**Obsidian 경로 연동**
+- `Path` 버튼으로 웹 앱의 Obsidian 볼트/아카이브 경로 설정 저장
+- `Save` 클릭 시 확장과 같은 `{base}/{언어}/polygot/{YYYY-MM-DD}/...md` 경로로 저장
+- Obsidian 설정이 없을 때는 기존 `.md` 다운로드로 fallback
 
 ### v1.2.0 — 2026-03-14
 **입력 커버리지 확장**

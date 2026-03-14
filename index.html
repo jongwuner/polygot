@@ -29,7 +29,8 @@
       <div class="toolbar-right">
         <button class="tool-btn" onclick="doCopy()">📋 Copy</button>
         <button class="tool-btn" onclick="doClear()">✕ Clear</button>
-        <button class="tool-btn" onclick="doDownload()">↓ Save</button>
+        <button class="tool-btn" onclick="doConfigureSave()">⚙ Path</button>
+        <button class="tool-btn" onclick="doDownload()">↓ Save .md</button>
       </div>
     </div>
     <div class="ime-buffer-wrap" id="imeBufferWrap">
@@ -60,6 +61,7 @@
 <script src="js/data/romaji-kana.js"></script>
 <script src="js/data/pinyin-hanzi.js"></script>
 <script src="js/data/config.js"></script>
+<script src="chrome-extension/obsidian.js"></script>
 <!-- Logic -->
 <script src="js/editor.js"></script>
 <script src="js/ime-japanese.js"></script>

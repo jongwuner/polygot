@@ -6,6 +6,9 @@ var textStore = {ko:'',en:'',jp:'',cn:'',de:''};
 var jpBuffer = '';
 var cnBuffer = '';
 var cnCandidates = [];
+var EDITOR_SOURCE_CODES = {ko:'ko',en:'en',jp:'ja',cn:'zh-CN',de:'de'};
+var WEB_OBSIDIAN_SETTINGS_KEY = 'polyglot-web-obsidian-settings';
+var WEB_OBSIDIAN_ARCHIVE_LANGS = ['auto','한국어','영어','일본어','중국어','독일어'];
 
 // ═══════════════════════════════════════════
 // CORE FUNCTIONS
@@ -194,13 +197,148 @@ function doClear() {
   ed.value='';textStore[currentLang]='';updateStats();ed.focus();showToast('✓ Cleared');
 }
 
+function buildMarkdownDateParts(now) {
+  return {
+    date: now.toISOString().split('T')[0],
+    hhmm: String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0'),
+    time: now.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' })
+  };
+}
+
+function getEditorObsidianData(text) {
+  return {
+    sourceCode: EDITOR_SOURCE_CODES[currentLang] || currentLang,
+    sourceLang: NAMES[currentLang],
+    text: text
+  };
+}
+
+function getEditorObsidianContext() {
+  return {
+    now: new Date(),
+    pageTitle: 'Polyglot Editor',
+    pageUrl: window.location.href,
+    siteSlug: 'polyglot-editor'
+  };
+}
+
+function normalizeArchiveLang(value) {
+  var normalized = (value || 'auto').trim();
+  if(WEB_OBSIDIAN_ARCHIVE_LANGS.indexOf(normalized) < 0) return 'auto';
+  return normalized;
+}
+
+function loadWebObsidianSettings() {
+  try {
+    var raw = localStorage.getItem(WEB_OBSIDIAN_SETTINGS_KEY);
+    if(!raw) return null;
+    var parsed = JSON.parse(raw);
+    if(!parsed || typeof parsed !== 'object') return null;
+    return {
+      obsidianVault: (parsed.obsidianVault || '').trim(),
+      archiveBase: (parsed.archiveBase || '4. Archive').trim() || '4. Archive',
+      archiveLang: normalizeArchiveLang(parsed.archiveLang || 'auto')
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+function saveWebObsidianSettings(settings) {
+  localStorage.setItem(WEB_OBSIDIAN_SETTINGS_KEY, JSON.stringify({
+    obsidianVault: settings.obsidianVault,
+    archiveBase: settings.archiveBase,
+    archiveLang: settings.archiveLang
+  }));
+}
+
+function promptWebObsidianSettings(existing) {
+  var current = existing || loadWebObsidianSettings() || {
+    obsidianVault: '',
+    archiveBase: '4. Archive',
+    archiveLang: 'auto'
+  };
+
+  var vault = window.prompt('Obsidian vault name', current.obsidianVault || '');
+  if(vault === null) return null;
+  vault = vault.trim();
+  if(!vault) return null;
+
+  var base = window.prompt('Archive base path', current.archiveBase || '4. Archive');
+  if(base === null) return null;
+  base = base.trim() || '4. Archive';
+
+  var archiveLang = window.prompt('Save folder: auto / 한국어 / 영어 / 일본어 / 중국어 / 독일어', current.archiveLang || 'auto');
+  if(archiveLang === null) return null;
+
+  return {
+    obsidianVault: vault,
+    archiveBase: base,
+    archiveLang: normalizeArchiveLang(archiveLang)
+  };
+}
+
+function buildWebSavePreview(settings) {
+  if(!window.PolyglotObsidian || !PolyglotObsidian.buildEditorNote) return settings.archiveBase + '/...';
+  var note = PolyglotObsidian.buildEditorNote(settings, getEditorObsidianData('Preview'), getEditorObsidianContext());
+  return note.filePath;
+}
+
+function doConfigureSave() {
+  var settings = promptWebObsidianSettings(loadWebObsidianSettings());
+  if(!settings) { showToast('Path setup cancelled'); return; }
+  saveWebObsidianSettings(settings);
+  showToast('Path → ' + buildWebSavePreview(settings));
+}
+
+function buildEditorMarkdown(text) {
+  var now = new Date();
+  var parts = buildMarkdownDateParts(now);
+  if(window.PolyglotObsidian && PolyglotObsidian.buildEditorMarkdown) {
+    return {
+      content: PolyglotObsidian.buildEditorMarkdown(getEditorObsidianData(text), getEditorObsidianContext()),
+      filename: 'polyglot-' + currentLang + '-' + parts.date + '_' + parts.hhmm + '.md'
+    };
+  }
+  return {
+    content: [
+      '#### ' + NAMES[currentLang] + ' Note  |  ' + parts.date + ' ' + parts.time,
+      '',
+      text
+    ].join('\n'),
+    filename: 'polyglot-' + currentLang + '-' + parts.date + '_' + parts.hhmm + '.md'
+  };
+}
+
+function downloadMarkdownFile(markdown) {
+  var blob = new Blob([markdown.content],{type:'text/markdown;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = markdown.filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function doDownload() {
   commitBuffer();
   var ed = document.getElementById('editor');
   if(!ed.value){showToast('Nothing to save');return;}
-  var blob = new Blob([ed.value],{type:'text/plain;charset=utf-8'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'polyglot-'+currentLang+'-'+Date.now()+'.txt';
-  a.click();URL.revokeObjectURL(a.href);showToast('✓ Downloaded');
+  var settings = loadWebObsidianSettings();
+
+  if(!settings || !settings.obsidianVault) {
+    settings = promptWebObsidianSettings(settings);
+    if(settings) {
+      saveWebObsidianSettings(settings);
+    }
+  }
+
+  if(settings && settings.obsidianVault && window.PolyglotObsidian && PolyglotObsidian.buildEditorNote) {
+    var note = PolyglotObsidian.buildEditorNote(settings, getEditorObsidianData(ed.value), getEditorObsidianContext());
+    window.location.href = note.uri;
+    showToast('Saved → ' + note.filePath);
+    return;
+  }
+
+  downloadMarkdownFile(buildEditorMarkdown(ed.value));
+  showToast('✓ Saved as .md');
 }

@@ -93,6 +93,23 @@ header{text-align:center;margin-bottom:18px}
 }
 .btn.save:hover{background:rgba(192,132,252,0.2)}
 .btn.full{width:100%;text-align:center}
+.queue-card{
+  margin-top:4px;padding:10px 12px;
+  background:rgba(255,255,255,0.03);border:1px solid #2a2a32;border-radius:8px;
+}
+.queue-count{
+  font-size:12px;font-weight:600;color:#e8e6e3;
+}
+.queue-preview{
+  margin-top:6px;font-size:11px;color:#72717a;line-height:1.5;
+  font-family:'Courier New',monospace;word-break:break-all;
+}
+.queue-actions{
+  display:flex;gap:6px;margin-top:8px;
+}
+.queue-actions .btn{
+  flex:1;
+}
 
 .shortcut-hint{
   margin-top:16px;text-align:center;
