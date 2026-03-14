@@ -116,9 +116,14 @@ Quick Insert 버튼으로 된소리(ㄲ,ㄸ,ㅃ,ㅆ,ㅉ)와 이중모음(ㅘ,ㅙ
 
 ### Usage
 
+**방법 1 — 드래그 (마우스)**
 1. 웹 페이지에서 텍스트 드래그
-2. `Alt+T` (단축키 변경: `chrome://extensions/shortcuts`)
-3. 번역 결과가 Obsidian 아카이브 파일에 자동 추가됨
+2. 선택 영역 옆에 **Translate** 버튼이 나타남
+3. 클릭하면 번역 패널 표시 → Copy 또는 Save to Obsidian
+
+**방법 2 — 단축키**
+1. 텍스트 선택 후 `Alt+T`
+2. 바로 번역 + Obsidian 저장 (단축키 변경: `chrome://extensions/shortcuts`)
 
 ### Obsidian Archive Format
 

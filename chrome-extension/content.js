@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════
 
 let panelHost = null;
+let fabHost = null;
 
 // ── Message listener ─────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -28,13 +29,104 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+// ═══════════════════════════════════════════
+// DRAG-TO-TRANSLATE: floating button on selection
+// ═══════════════════════════════════════════
+document.addEventListener('mouseup', (e) => {
+  // Ignore clicks inside our own UI
+  if (panelHost?.contains(e.target) || fabHost?.contains(e.target)) return;
+
+  setTimeout(() => {
+    const text = window.getSelection().toString().trim();
+    if (text.length > 0) {
+      showFab(e.clientX, e.clientY);
+    } else {
+      removeFab();
+    }
+  }, 10);
+});
+
 // ── Close on Escape / click-outside ──────
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') removePanel();
+  if (e.key === 'Escape') { removePanel(); removeFab(); }
 });
 document.addEventListener('mousedown', (e) => {
   if (panelHost && !panelHost.contains(e.target)) removePanel();
+  if (fabHost && !fabHost.contains(e.target) && !panelHost?.contains(e.target)) removeFab();
 });
+
+// ═══════════════════════════════════════════
+// FAB (Floating Action Button)
+// ═══════════════════════════════════════════
+function showFab(x, y) {
+  removeFab();
+
+  fabHost = document.createElement('div');
+  fabHost.id = 'polyglot-fab-root';
+  fabHost.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:auto;';
+
+  const shadow = fabHost.attachShadow({ mode: 'closed' });
+
+  shadow.innerHTML = `
+<style>
+.pg-fab{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 12px;
+  background:#16161a;border:1px solid #2a2a32;border-radius:100px;
+  font:600 12px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  color:#e8e6e3;cursor:pointer;
+  box-shadow:0 8px 28px rgba(0,0,0,0.45);
+  transition:all .15s ease;
+  user-select:none;
+  white-space:nowrap;
+}
+.pg-fab:hover{background:#1e1e24;border-color:#4ecdc4;box-shadow:0 8px 32px rgba(78,205,196,0.2)}
+.pg-fab-logo{
+  font-size:11px;font-weight:700;letter-spacing:-0.02em;
+  background:linear-gradient(135deg,#4ecdc4,#c084fc);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+</style>
+<div class="pg-fab" id="pgFab">
+  <span class="pg-fab-logo">P</span> Translate
+</div>`;
+
+  shadow.getElementById('pgFab').addEventListener('click', (e) => {
+    e.stopPropagation();
+    triggerTranslate();
+  });
+
+  document.body.appendChild(fabHost);
+
+  // Position near cursor, offset slightly to the right
+  let left = x + 10;
+  let top = y - 40;
+  if (left + 120 > window.innerWidth) left = window.innerWidth - 130;
+  if (top < 8) top = y + 16;
+
+  fabHost.style.left = left + 'px';
+  fabHost.style.top = top + 'px';
+}
+
+function removeFab() {
+  if (fabHost) { fabHost.remove(); fabHost = null; }
+}
+
+function triggerTranslate() {
+  const text = window.getSelection().toString().trim();
+  if (!text) return;
+
+  removeFab();
+  showPageToast('Translating...', false);
+
+  chrome.runtime.sendMessage({ action: 'translate', text }, (response) => {
+    if (response?.data) {
+      showPanel(response.data);
+    } else {
+      showPageToast(response?.error || 'Translation failed.', true);
+    }
+  });
+}
 
 // ═══════════════════════════════════════════
 // PANEL UI (Shadow DOM)
