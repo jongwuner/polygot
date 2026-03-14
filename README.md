@@ -8,6 +8,8 @@
 
 Firebase Hosting: [polyglot-f8ea5.web.app](https://polyglot-f8ea5.web.app)
 
+Version Notes: [CHANGELOG.md](CHANGELOG.md)
+
 ---
 
 ## Project Structure
@@ -121,9 +123,13 @@ Quick Insert 버튼으로 된소리(ㄲ,ㄸ,ㅃ,ㅆ,ㅉ)와 이중모음(ㅘ,ㅙ
 **방법 1 — 드래그 (마우스)**
 1. 웹 페이지에서 텍스트 드래그
 2. 선택 영역 옆에 **Translate** 버튼이 나타남
-3. 클릭하면 번역 패널 표시 → Copy 또는 Save to Obsidian
+3. 클릭하면 번역 패널 표시 + Obsidian 자동 저장
 
-**방법 2 — 단축키**
+**방법 2 — 우클릭**
+1. 텍스트 선택 후 우클릭
+2. **"Polyglot: Translate"** 메뉴 클릭
+
+**방법 3 — 단축키**
 1. 텍스트 선택 후 `Alt+T`
 2. 바로 번역 + Obsidian 저장 (단축키 변경: `chrome://extensions/shortcuts`)
 
@@ -156,6 +162,20 @@ Quick Insert 버튼으로 된소리(ㄲ,ㄸ,ㅃ,ㅆ,ㅉ)와 이중모음(ㅘ,ㅙ
 > The original selected text here
 
 번역된 텍스트
+
+*Source: [Page Title](https://example.com)*
+```
+
+중국어/일본어 번역 시 발음 자동 포함:
+
+```markdown
+#### English → 中文  |  2026-03-14 14:30
+
+> hello world
+
+你好世界
+
+*Pinyin: nǐ hǎo shìjiè*
 
 *Source: [Page Title](https://example.com)*
 ```
