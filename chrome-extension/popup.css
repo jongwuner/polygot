@@ -77,6 +77,10 @@ header{text-align:center;margin-bottom:18px}
   margin-top:8px;
 }
 .btn.primary:hover{background:rgba(78,205,196,0.2)}
+.path-preview{
+  margin-top:6px;font-size:11px;color:#72717a;opacity:0.6;
+  font-family:'Courier New',monospace;word-break:break-all;
+}
 .btn.save{
   background:rgba(192,132,252,0.1);border-color:rgba(192,132,252,0.3);color:#c084fc;
 }

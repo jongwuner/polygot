@@ -285,42 +285,62 @@ function esc(str) {
 
 // ═══════════════════════════════════════════
 // OBSIDIAN SAVE
+// Path: {archiveBase}/{언어}/polygot/{YYYY-MM-DD}/{YYYY-MM-DD_HHmm_site}.md
 // ═══════════════════════════════════════════
+const SOURCE_LANG_FOLDER = {
+  'ko': '한국어', 'en': '영어', 'ja': '일본어',
+  'zh-CN': '중국어', 'zh-TW': '중국어', 'de': '독일어',
+  'fr': '프랑스어', 'es': '스페인어', 'ru': '러시아어',
+  'pt': '포르투갈어', 'it': '이탈리아어', 'ar': '아랍어'
+};
+
+function slugifySite(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').replace(/\./g, '-');
+  } catch { return 'unknown'; }
+}
+
 function saveToObsidian(data, options) {
   const opts = options || {};
-  chrome.storage.sync.get(['obsidianVault', 'archiveFile'], (settings) => {
+  chrome.storage.sync.get(['obsidianVault', 'archiveBase'], (settings) => {
     const vault = settings.obsidianVault || '';
-    const file  = settings.archiveFile  || 'Foreign Language Archive';
+    const base  = settings.archiveBase  || '4. Archive';
 
     if (!vault) {
       showPageToast('Set the Obsidian vault in the extension popup first.', true);
       return;
     }
 
-    const date = new Date().toISOString().split('T')[0];
-    const time = new Date().toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+    const now = new Date();
+    const date = now.toISOString().split('T')[0];
+    const hhmm = String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+    const time = now.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
     const pageUrl = window.location.href;
     const pageTitle = document.title;
+    const site = slugifySite(pageUrl);
 
-    const entry = [
-      '',
-      '---',
+    // Determine folder by detected source language
+    const langFolder = SOURCE_LANG_FOLDER[data.sourceCode] || data.sourceLang || 'other';
+
+    // File path: 4. Archive/영어/polygot/2026-03-14/2026-03-14_1430_example-com.md
+    const filePath = base + '/' + langFolder + '/polygot/' + date + '/' + date + '_' + hhmm + '_' + site;
+
+    const content = [
       '#### ' + data.sourceLang + ' → ' + data.targetLang + '  |  ' + date + ' ' + time,
+      '',
       '> ' + data.original.replace(/\n/g, '\n> '),
       '',
       data.translated,
       '',
-      '*Source: [' + pageTitle + '](' + pageUrl + ')*',
-      ''
+      '*Source: [' + pageTitle + '](' + pageUrl + ')*'
     ].join('\n');
 
     const uri = 'obsidian://new?vault=' + encodeURIComponent(vault)
-      + '&file=' + encodeURIComponent(file)
-      + '&content=' + encodeURIComponent(entry)
-      + '&append=true';
+      + '&file=' + encodeURIComponent(filePath)
+      + '&content=' + encodeURIComponent(content);
 
     if (opts.silent) {
-      showPageToast('Opening Obsidian...', false);
+      showPageToast('Saved → ' + langFolder + '/polygot/' + date, false);
     }
 
     window.location.href = uri;

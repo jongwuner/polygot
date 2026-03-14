@@ -7,11 +7,12 @@ const LANG_NAMES = {
 };
 
 // ── Load saved settings ──────────────────
-chrome.storage.sync.get(['targetLang', 'obsidianVault', 'archiveFile'], (s) => {
+chrome.storage.sync.get(['targetLang', 'obsidianVault', 'archiveBase'], (s) => {
   const lang = s.targetLang || 'ko';
   setActiveChip(lang);
   document.getElementById('vaultName').value = s.obsidianVault || '';
-  document.getElementById('archiveFile').value = s.archiveFile || 'Foreign Language Archive';
+  document.getElementById('archiveBase').value = s.archiveBase || '4. Archive';
+  updatePathPreview();
 });
 
 // ── Language chip selection ──────────────
@@ -37,13 +38,23 @@ document.getElementById('saveSettings').addEventListener('click', () => {
   chrome.storage.sync.set({
     targetLang:    getSelectedLang(),
     obsidianVault: document.getElementById('vaultName').value.trim(),
-    archiveFile:   document.getElementById('archiveFile').value.trim() || 'Foreign Language Archive'
+    archiveBase:   document.getElementById('archiveBase').value.trim() || '4. Archive'
   }, () => {
     const btn = document.getElementById('saveSettings');
     btn.textContent = 'Saved!';
     setTimeout(() => { btn.textContent = 'Save Settings'; }, 1200);
   });
 });
+
+// ── Path preview ─────────────────────────
+document.getElementById('archiveBase').addEventListener('input', updatePathPreview);
+
+function updatePathPreview() {
+  const base = document.getElementById('archiveBase').value.trim() || '4. Archive';
+  const today = new Date().toISOString().split('T')[0];
+  const el = document.getElementById('pathPreview');
+  el.textContent = base + '/영어/polygot/' + today + '/...';
+}
 
 // ── Quick Translate ──────────────────────
 document.getElementById('translateBtn').addEventListener('click', async () => {

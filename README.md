@@ -112,7 +112,9 @@ Quick Insert 버튼으로 된소리(ㄲ,ㄸ,ㅃ,ㅆ,ㅉ)와 이중모음(ㅘ,ㅙ
 
 1. `chrome://extensions` → 개발자 모드 ON
 2. "압축해제된 확장 프로그램을 로드합니다" → `chrome-extension` 폴더 선택
-3. 확장 프로그램 아이콘 클릭 → Vault 이름, Archive 파일 경로 설정 → Save
+3. 확장 프로그램 아이콘 클릭 → 설정:
+   - **Vault Name**: Obsidian 볼트 이름 (예: `MyVault`)
+   - **Archive Base Path**: 아카이브 루트 경로 (예: `4. Archive`)
 
 ### Usage
 
@@ -125,17 +127,40 @@ Quick Insert 버튼으로 된소리(ㄲ,ㄸ,ㅃ,ㅆ,ㅉ)와 이중모음(ㅘ,ㅙ
 1. 텍스트 선택 후 `Alt+T`
 2. 바로 번역 + Obsidian 저장 (단축키 변경: `chrome://extensions/shortcuts`)
 
-### Obsidian Archive Format
+### Obsidian Archive 구조
+
+감지된 소스 언어 기준으로 자동 분류됩니다.
+
+```
+4. Archive/
+├── 영어/polygot/
+│   ├── 2026-03-14/
+│   │   ├── 2026-03-14_1430_bbc-com.md
+│   │   └── 2026-03-14_1545_github-com.md
+│   └── 2026-03-15/
+│       └── ...
+├── 일본어/polygot/
+│   └── 2026-03-14/
+│       └── 2026-03-14_2010_nhk-or-jp.md
+├── 중국어/polygot/
+│   └── ...
+└── 독일어/polygot/
+    └── ...
+```
+
+각 파일 내용:
 
 ```markdown
----
 #### English → 한국어  |  2026-03-14 14:30
+
 > The original selected text here
 
 번역된 텍스트
 
 *Source: [Page Title](https://example.com)*
 ```
+
+저녁 cron이 이 폴더를 읽어서 복습노트에 반영합니다.
 
 ### Popup Quick Translate
 
