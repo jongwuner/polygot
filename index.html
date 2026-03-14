@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polyglot</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">Polyglot</div>
+    <div class="subtitle">한국어 · English · 日本語 · 中文 · Deutsch</div>
+  </header>
+  <div class="lang-tabs">
+    <button class="lang-tab active" data-lang="ko" onclick="handleTabClick('ko')"><span class="dot"></span> 🇰🇷 한국어</button>
+    <button class="lang-tab" data-lang="en" onclick="handleTabClick('en')"><span class="dot"></span> 🇺🇸 English</button>
+    <button class="lang-tab" data-lang="jp" onclick="handleTabClick('jp')"><span class="dot"></span> 🇯🇵 日本語</button>
+    <button class="lang-tab" data-lang="cn" onclick="handleTabClick('cn')"><span class="dot"></span> 🇨🇳 中文</button>
+    <button class="lang-tab" data-lang="de" onclick="handleTabClick('de')"><span class="dot"></span> 🇩🇪 Deutsch</button>
+  </div>
+  <div class="editor-card" id="editorCard" data-active="ko">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <span class="current-lang" id="currentLang">한국어</span>
+        <span id="modeBadge"></span>
+        <span class="char-count" id="charCount">0 chars</span>
+      </div>
+      <div class="toolbar-right">
+        <button class="tool-btn" onclick="doCopy()">📋 Copy</button>
+        <button class="tool-btn" onclick="doClear()">✕ Clear</button>
+        <button class="tool-btn" onclick="doDownload()">↓ Save</button>
+      </div>
+    </div>
+    <div class="ime-buffer-wrap" id="imeBufferWrap">
+      <span class="ime-buffer-label" id="imeBufferLabel">Buffer</span>
+      <span class="ime-buffer" id="imeBufferDisplay"></span>
+    </div>
+    <div class="candidates-wrap" id="candidatesWrap">
+      <div class="candidates-list" id="candidatesList"></div>
+    </div>
+    <textarea class="editor-area" id="editor" placeholder="여기에 입력하세요..." autofocus spellcheck="false"></textarea>
+    <div class="statusbar">
+      <div class="status-left">
+        <span class="stat">Words: <strong id="wordCount">0</strong></span>
+        <span class="stat">Lines: <strong id="lineCount">1</strong></span>
+      </div>
+      <div class="status-right">
+        <span class="stat"><kbd>Ctrl</kbd>+<kbd>1-5</kbd> switch</span>
+      </div>
+    </div>
+  </div>
+  <div id="quickInsert"></div>
+  <div class="ime-hint" id="imeHint"></div>
+  <footer class="copyright">&copy; Grady Lee.</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- Data (dictionary / mapping) -->
+<script src="js/data/romaji-kana.js"></script>
+<script src="js/data/pinyin-hanzi.js"></script>
+<script src="js/data/config.js"></script>
+<!-- Logic -->
+<script src="js/editor.js"></script>
+<script src="js/ime-japanese.js"></script>
+<script src="js/ime-chinese.js"></script>
+<!-- Init -->
+<script src="js/app.js"></script>
+</body>
+</html>

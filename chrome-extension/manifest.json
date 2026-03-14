@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Polyglot Translate",
+  "version": "1.0.0",
+  "description": "Select text and press a shortcut to translate and send it to Obsidian",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://translate.googleapis.com/*"],
+  "commands": {
+    "translate-selection": {
+      "suggested_key": {
+        "default": "Alt+T",
+        "mac": "Alt+T"
+      },
+      "description": "Translate selection and send it to Obsidian"
+    }
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"]
+  }]
+}

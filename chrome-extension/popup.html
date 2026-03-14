@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">Polyglot</div>
+    <div class="subtitle">Translate and send to Obsidian</div>
+  </header>
+
+  <!-- Quick Translate -->
+  <div class="section">
+    <label class="label">Quick Translate</label>
+    <textarea id="inputText" class="input-area" placeholder="번역할 텍스트 입력..." rows="3"></textarea>
+    <div class="result-area" id="resultArea"></div>
+    <button class="btn primary full" id="translateBtn">Translate</button>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Settings -->
+  <div class="section">
+    <label class="label">Target Language</label>
+    <div class="lang-options" id="langOptions">
+      <button class="lang-chip active" data-lang="ko"><span class="dot" style="background:#4ecdc4"></span> 한국어</button>
+      <button class="lang-chip" data-lang="en"><span class="dot" style="background:#ff6b6b"></span> English</button>
+      <button class="lang-chip" data-lang="jp"><span class="dot" style="background:#c084fc"></span> 日本語</button>
+      <button class="lang-chip" data-lang="cn"><span class="dot" style="background:#fbbf24"></span> 中文</button>
+      <button class="lang-chip" data-lang="de"><span class="dot" style="background:#60a5fa"></span> Deutsch</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <label class="label">Obsidian Vault Name</label>
+    <input type="text" id="vaultName" class="text-input" placeholder="e.g. MyVault">
+  </div>
+
+  <div class="section">
+    <label class="label">Archive File Path</label>
+    <input type="text" id="archiveFile" class="text-input" placeholder="e.g. Foreign Language Archive" value="Foreign Language Archive">
+  </div>
+
+  <button class="btn save full" id="saveSettings">Save Settings</button>
+
+  <div class="shortcut-hint">
+    <kbd>Alt</kbd> + <kbd>T</kbd> &nbsp; Save selected text to Obsidian
+  </div>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>

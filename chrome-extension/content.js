@@ -1,0 +1,236 @@
+// ═══════════════════════════════════════════
+// POLYGLOT CONTENT SCRIPT
+// Shadow DOM panel for style isolation
+// ═══════════════════════════════════════════
+
+let panelHost = null;
+
+// ── Message listener ─────────────────────
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === 'getSelection') {
+    const text = window.getSelection().toString().trim();
+    sendResponse({ text: text || '' });
+    return;
+  }
+
+  if (msg.action === 'showTranslation') {
+    showPanel(msg.data);
+    return;
+  }
+
+  if (msg.action === 'saveTranslationToObsidian') {
+    saveToObsidian(msg.data, { silent: true });
+    return;
+  }
+
+  if (msg.action === 'polyglotToast') {
+    showPageToast(msg.message, msg.isError);
+  }
+});
+
+// ── Close on Escape / click-outside ──────
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') removePanel();
+});
+document.addEventListener('mousedown', (e) => {
+  if (panelHost && !panelHost.contains(e.target)) removePanel();
+});
+
+// ═══════════════════════════════════════════
+// PANEL UI (Shadow DOM)
+// ═══════════════════════════════════════════
+function showPanel(data) {
+  removePanel();
+
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const rect = sel.getRangeAt(0).getBoundingClientRect();
+
+  // Host element
+  panelHost = document.createElement('div');
+  panelHost.id = 'polyglot-ext-root';
+  panelHost.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:auto;';
+
+  const shadow = panelHost.attachShadow({ mode: 'closed' });
+
+  shadow.innerHTML = `
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+.pg{
+  width:380px;max-height:420px;overflow-y:auto;
+  background:#16161a;border:1px solid #2a2a32;border-radius:14px;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  color:#e8e6e3;font-size:14px;
+  box-shadow:0 12px 48px rgba(0,0,0,0.5);
+}
+.pg-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border-bottom:1px solid #2a2a32;
+}
+.pg-logo{font-size:13px;font-weight:700;letter-spacing:-0.02em;
+  background:linear-gradient(135deg,#4ecdc4,#c084fc);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.pg-lang{font-size:11px;color:#72717a;font-weight:500}
+.pg-close{background:none;border:none;color:#72717a;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px}
+.pg-close:hover{background:#2a2a32;color:#e8e6e3}
+.pg-body{padding:14px 16px}
+.pg-section{margin-bottom:12px}
+.pg-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#72717a;margin-bottom:6px}
+.pg-original{font-size:13px;color:#9998a1;line-height:1.6;
+  padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;
+  border-left:3px solid #4ecdc4;max-height:80px;overflow-y:auto}
+.pg-translated{font-size:15px;color:#e8e6e3;line-height:1.7;
+  padding:10px 12px;background:rgba(78,205,196,0.05);border-radius:8px;
+  border-left:3px solid #c084fc}
+.pg-actions{display:flex;gap:6px;padding:0 16px 14px}
+.pg-btn{flex:1;padding:8px 12px;border:1px solid #2a2a32;border-radius:8px;
+  background:#16161a;color:#72717a;cursor:pointer;font-size:12px;font-weight:500;
+  font-family:inherit;transition:all .15s ease;text-align:center}
+.pg-btn:hover{background:#1e1e24;color:#e8e6e3;border-color:#3a3a44}
+.pg-btn.primary{background:rgba(78,205,196,0.1);border-color:rgba(78,205,196,0.3);color:#4ecdc4}
+.pg-btn.primary:hover{background:rgba(78,205,196,0.2)}
+.pg-toast{font-size:11px;text-align:center;color:#4ecdc4;padding:0 16px 10px;display:none}
+</style>
+
+<div class="pg">
+  <div class="pg-header">
+    <span class="pg-logo">Polyglot</span>
+    <span class="pg-lang">${esc(data.sourceLang)} → ${esc(data.targetLang)}</span>
+    <button class="pg-close" id="pgClose">✕</button>
+  </div>
+  <div class="pg-body">
+    <div class="pg-section">
+      <div class="pg-label">Original</div>
+      <div class="pg-original">${esc(data.original)}</div>
+    </div>
+    <div class="pg-section">
+      <div class="pg-label">Translation</div>
+      <div class="pg-translated">${esc(data.translated)}</div>
+    </div>
+  </div>
+  <div class="pg-actions">
+    <button class="pg-btn" id="pgCopy">Copy</button>
+    <button class="pg-btn primary" id="pgSave">Save to Obsidian</button>
+  </div>
+  <div class="pg-toast" id="pgToast"></div>
+</div>`;
+
+  // ── Event handlers ──
+  shadow.getElementById('pgClose').onclick = removePanel;
+
+  shadow.getElementById('pgCopy').onclick = () => {
+    navigator.clipboard.writeText(data.translated).then(() => {
+      flashToast(shadow, 'Copied!');
+    });
+  };
+
+  shadow.getElementById('pgSave').onclick = () => {
+    saveToObsidian(data);
+    flashToast(shadow, 'Saved to Obsidian!');
+  };
+
+  document.body.appendChild(panelHost);
+
+  // ── Position near selection ──
+  const panelW = 380;
+  const panelH = 300;
+  let left = rect.left + rect.width / 2 - panelW / 2;
+  let top = rect.bottom + 8;
+
+  // Keep within viewport
+  if (left < 8) left = 8;
+  if (left + panelW > window.innerWidth - 8) left = window.innerWidth - panelW - 8;
+  if (top + panelH > window.innerHeight - 8) top = rect.top - panelH - 8;
+
+  panelHost.style.left = left + 'px';
+  panelHost.style.top = top + 'px';
+}
+
+function removePanel() {
+  if (panelHost) {
+    panelHost.remove();
+    panelHost = null;
+  }
+}
+
+function showPageToast(message, isError) {
+  const existing = document.getElementById('polyglot-page-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'polyglot-page-toast';
+  toast.textContent = message;
+  toast.style.cssText = [
+    'position:fixed',
+    'right:16px',
+    'bottom:16px',
+    'z-index:2147483647',
+    'padding:10px 14px',
+    'border-radius:10px',
+    'font:500 13px/1.4 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+    'color:#f5f5f5',
+    'background:' + (isError ? '#8b1e3f' : '#0f766e'),
+    'box-shadow:0 12px 28px rgba(0,0,0,0.28)'
+  ].join(';');
+
+  document.body.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 1800);
+}
+
+function flashToast(shadow, msg) {
+  const toast = shadow.getElementById('pgToast');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  setTimeout(() => { toast.style.display = 'none'; }, 1500);
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// ═══════════════════════════════════════════
+// OBSIDIAN SAVE
+// ═══════════════════════════════════════════
+function saveToObsidian(data, options) {
+  const opts = options || {};
+  chrome.storage.sync.get(['obsidianVault', 'archiveFile'], (settings) => {
+    const vault = settings.obsidianVault || '';
+    const file  = settings.archiveFile  || 'Foreign Language Archive';
+
+    if (!vault) {
+      showPageToast('Set the Obsidian vault in the extension popup first.', true);
+      return;
+    }
+
+    const date = new Date().toISOString().split('T')[0];
+    const time = new Date().toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+    const pageUrl = window.location.href;
+    const pageTitle = document.title;
+
+    const entry = [
+      '',
+      '---',
+      '#### ' + data.sourceLang + ' → ' + data.targetLang + '  |  ' + date + ' ' + time,
+      '> ' + data.original.replace(/\n/g, '\n> '),
+      '',
+      data.translated,
+      '',
+      '*Source: [' + pageTitle + '](' + pageUrl + ')*',
+      ''
+    ].join('\n');
+
+    const uri = 'obsidian://new?vault=' + encodeURIComponent(vault)
+      + '&file=' + encodeURIComponent(file)
+      + '&content=' + encodeURIComponent(entry)
+      + '&append=true';
+
+    if (opts.silent) {
+      showPageToast('Opening Obsidian...', false);
+    }
+
+    window.location.href = uri;
+  });
+}
