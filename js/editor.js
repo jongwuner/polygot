@@ -291,35 +291,7 @@ function doConfigureSave() {
   showToast('Path → ' + buildWebSavePreview(settings));
 }
 
-function buildEditorMarkdown(text) {
-  var now = new Date();
-  var parts = buildMarkdownDateParts(now);
-  if(window.PolyglotObsidian && PolyglotObsidian.buildEditorMarkdown) {
-    return {
-      content: PolyglotObsidian.buildEditorMarkdown(getEditorObsidianData(text), getEditorObsidianContext()),
-      filename: 'polyglot-' + currentLang + '-' + parts.date + '_' + parts.hhmm + '.md'
-    };
-  }
-  return {
-    content: [
-      '#### ' + NAMES[currentLang] + ' Note  |  ' + parts.date + ' ' + parts.time,
-      '',
-      text
-    ].join('\n'),
-    filename: 'polyglot-' + currentLang + '-' + parts.date + '_' + parts.hhmm + '.md'
-  };
-}
-
-function downloadMarkdownFile(markdown) {
-  var blob = new Blob([markdown.content],{type:'text/markdown;charset=utf-8'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = markdown.filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function doDownload() {
+function doSave() {
   commitBuffer();
   var ed = document.getElementById('editor');
   if(!ed.value){showToast('Nothing to save');return;}
@@ -332,13 +304,21 @@ function doDownload() {
     }
   }
 
-  if(settings && settings.obsidianVault && window.PolyglotObsidian && PolyglotObsidian.buildEditorNote) {
+  if(!settings || !settings.obsidianVault) {
+    showToast('Obsidian vault required');
+    return;
+  }
+
+  if(window.PolyglotObsidian && PolyglotObsidian.buildEditorNote) {
     var note = PolyglotObsidian.buildEditorNote(settings, getEditorObsidianData(ed.value), getEditorObsidianContext());
     window.location.href = note.uri;
     showToast('Saved → ' + note.filePath);
     return;
   }
 
-  downloadMarkdownFile(buildEditorMarkdown(ed.value));
-  showToast('✓ Saved as .md');
+  showToast('Obsidian save unavailable');
+}
+
+function doDownload() {
+  doSave();
 }

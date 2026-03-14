@@ -264,7 +264,7 @@ function showPanel(data) {
   </div>
   <div class="pg-actions">
     <button class="pg-btn" id="pgCopy">Copy</button>
-    <button class="pg-btn primary" id="pgSave">Queue Note</button>
+    <button class="pg-btn primary" id="pgSave">Save to Obsidian</button>
   </div>
   <div class="pg-toast" id="pgToast"></div>
 </div>`;
@@ -280,7 +280,7 @@ function showPanel(data) {
 
   shadow.getElementById('pgSave').onclick = () => {
     saveToObsidian(data);
-    flashToast(shadow, 'Queued!');
+    flashToast(shadow, 'Saved to Obsidian!');
   };
 
   document.body.appendChild(panelHost);
@@ -418,8 +418,14 @@ function getObsidianBuilder() {
 function saveToObsidian(data, options) {
   const opts = options || {};
   const loaded = getSyncStorageSafe(['obsidianVault', 'archiveBase', 'archiveLang'], (settings) => {
+    const vault = settings.obsidianVault || '';
+    if (!vault) {
+      showPageToast('Set the Obsidian vault in the extension popup first.', true);
+      return;
+    }
+
     const note = getObsidianBuilder().buildTranslationNote({
-      obsidianVault: settings.obsidianVault || '',
+      obsidianVault: vault,
       archiveBase: settings.archiveBase || '4. Archive',
       archiveLang: settings.archiveLang || 'auto'
     }, data, {
@@ -428,32 +434,11 @@ function saveToObsidian(data, options) {
       pageUrl: window.location.href
     });
 
-    const sent = sendRuntimeMessageSafe({
-      action: 'queuePendingNote',
-      note: {
-        content: note.content,
-        filePath: note.filePath,
-        obsidianVault: settings.obsidianVault || '',
-        source: 'content-script'
-      }
-    }, (response) => {
-      const runtimeError = chrome.runtime.lastError;
-      if (runtimeError) {
-        if (isInvalidatedContextError(runtimeError)) {
-          showPageToast(getRefreshRequiredMessage(), true);
-        } else {
-          showPageToast(runtimeError.message || 'Queue failed.', true);
-        }
-        return;
-      }
+    if (opts.silent) {
+      showPageToast('Saved → ' + note.filePath, false);
+    }
 
-      if (response?.data) {
-        showPageToast('Queued → ' + note.filePath, false);
-      } else {
-        showPageToast(response?.error || 'Queue failed.', true);
-      }
-    });
-    if (!sent) return;
+    window.location.href = note.uri;
   });
   if (!loaded) return;
 }

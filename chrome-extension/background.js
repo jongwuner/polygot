@@ -16,9 +16,6 @@ const CODE_TO_NAME = {
   'ru': 'Русский', 'it': 'Italiano', 'ar': 'العربية'
 };
 
-const PENDING_NOTES_KEY = 'pendingNotes';
-const QUEUE_OPEN_DELAY_MS = 250;
-
 // ═══════════════════════════════════════════
 // TRANSLATION API
 // ═══════════════════════════════════════════
@@ -216,121 +213,6 @@ async function notifyError(err) {
   } catch (e) { /* ignore */ }
 }
 
-async function getPendingNotes() {
-  const stored = await chrome.storage.local.get(PENDING_NOTES_KEY);
-  const notes = stored[PENDING_NOTES_KEY];
-  return Array.isArray(notes) ? notes : [];
-}
-
-async function setPendingNotes(notes) {
-  await chrome.storage.local.set({ [PENDING_NOTES_KEY]: notes });
-}
-
-function makePendingNote(note) {
-  return {
-    content: note.content,
-    createdAt: new Date().toISOString(),
-    filePath: note.filePath,
-    id: (globalThis.crypto && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : String(Date.now()) + '-' + Math.random().toString(16).slice(2),
-    obsidianVault: note.obsidianVault || '',
-    source: note.source || 'unknown'
-  };
-}
-
-function summarizePendingNotes(notes) {
-  const latest = notes.length ? notes[notes.length - 1] : null;
-  return {
-    count: notes.length,
-    latestPath: latest ? latest.filePath : '',
-    items: notes.slice(-5).reverse().map((note) => ({
-      createdAt: note.createdAt,
-      filePath: note.filePath,
-      id: note.id,
-      source: note.source || 'unknown'
-    }))
-  };
-}
-
-async function enqueuePendingNote(note) {
-  const notes = await getPendingNotes();
-  const pendingNote = makePendingNote(note);
-  notes.push(pendingNote);
-  await setPendingNotes(notes);
-  return {
-    count: notes.length,
-    note: pendingNote
-  };
-}
-
-function buildObsidianUri(vault, filePath, content) {
-  return 'obsidian://new?vault=' + encodeURIComponent(vault)
-    + '&file=' + encodeURIComponent(filePath)
-    + '&content=' + encodeURIComponent(content);
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function openQueuedNote(note, fallbackVault) {
-  const vault = note.obsidianVault || fallbackVault;
-  if (!vault) {
-    throw new Error('MISSING_VAULT');
-  }
-
-  await chrome.tabs.create({
-    active: false,
-    url: buildObsidianUri(vault, note.filePath, note.content)
-  });
-}
-
-async function flushPendingNotes(mode) {
-  const notes = await getPendingNotes();
-  if (!notes.length) {
-    return { count: 0, flushedCount: 0, latestPath: '', remainingCount: 0 };
-  }
-
-  const syncSettings = await chrome.storage.sync.get(['obsidianVault']);
-  const fallbackVault = syncSettings.obsidianVault || '';
-  const flushCount = mode === 'one' ? 1 : notes.length;
-  const remaining = notes.slice();
-  let flushedCount = 0;
-
-  while (remaining.length && flushedCount < flushCount) {
-    const note = remaining[0];
-    await openQueuedNote(note, fallbackVault);
-    remaining.shift();
-    flushedCount += 1;
-
-    if (remaining.length && flushedCount < flushCount) {
-      await sleep(QUEUE_OPEN_DELAY_MS);
-    }
-  }
-
-  await setPendingNotes(remaining);
-
-  return {
-    count: remaining.length,
-    flushedCount: flushedCount,
-    latestPath: remaining.length ? remaining[remaining.length - 1].filePath : '',
-    remainingCount: remaining.length
-  };
-}
-
-async function clearPendingNotes() {
-  await setPendingNotes([]);
-  return { count: 0, latestPath: '', remainingCount: 0 };
-}
-
-function getQueueErrorMessage(err) {
-  if (String(err?.message || '') === 'MISSING_VAULT') {
-    return 'Set Obsidian Vault Name first.';
-  }
-  return err?.message || 'Queue operation failed.';
-}
-
 // ═══════════════════════════════════════════
 // MESSAGE HANDLER (from content script)
 // ═══════════════════════════════════════════
@@ -348,52 +230,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     })();
     return true; // keep channel open for async response
-  }
-
-  if (msg.action === 'queuePendingNote') {
-    (async () => {
-      try {
-        const result = await enqueuePendingNote(msg.note || {});
-        sendResponse({ data: result });
-      } catch (err) {
-        sendResponse({ error: getQueueErrorMessage(err) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.action === 'getPendingNotesSummary') {
-    (async () => {
-      try {
-        sendResponse({ data: summarizePendingNotes(await getPendingNotes()) });
-      } catch (err) {
-        sendResponse({ error: getQueueErrorMessage(err) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.action === 'flushPendingNotes') {
-    (async () => {
-      try {
-        const result = await flushPendingNotes(msg.mode || 'all');
-        sendResponse({ data: result });
-      } catch (err) {
-        sendResponse({ error: getQueueErrorMessage(err) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.action === 'clearPendingNotes') {
-    (async () => {
-      try {
-        const result = await clearPendingNotes();
-        sendResponse({ data: result });
-      } catch (err) {
-        sendResponse({ error: getQueueErrorMessage(err) });
-      }
-    })();
-    return true;
   }
 });

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Polyglot Translate",
-  "version": "1.5.0",
-  "description": "Select text, queue translations, and save them to Obsidian later",
+  "version": "1.5.1",
+  "description": "Select text and save translations directly to Obsidian",
   "permissions": ["activeTab", "storage", "contextMenus"],
   "host_permissions": ["https://translate.googleapis.com/*"],
   "commands": {
@@ -11,7 +11,7 @@
         "default": "Alt+T",
         "mac": "Alt+T"
       },
-      "description": "Translate selection and queue it for Obsidian"
+      "description": "Translate selection and save it to Obsidian"
     }
   },
   "action": {

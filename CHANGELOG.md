@@ -2,6 +2,13 @@
 
 ## Chrome Extension
 
+### v1.5.1 — 2026-03-14
+**즉시 Obsidian 저장으로 통일**
+- 큐 저장 기능 제거
+- 드래그 / 우클릭 / Alt+T / 팝업 번역 모두 즉시 Obsidian으로 저장
+- 팝업 Queue UI 제거
+- 웹 앱 `Save`도 다운로드 fallback 없이 Obsidian 즉시 저장으로 정리
+
 ### v1.5.0 — 2026-03-14
 **임시 큐 저장 방식**
 - 드래그 / 우클릭 / Alt+T / 팝업 번역 결과를 즉시 Obsidian으로 열지 않고 확장 내부 큐에 임시 저장

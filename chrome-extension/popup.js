@@ -12,7 +12,6 @@ chrome.storage.sync.get(SETTINGS_KEYS, (s) => {
   document.getElementById('archiveBase').value = s.archiveBase || '4. Archive';
   document.getElementById('archiveLang').value = s.archiveLang || 'auto';
   updatePathPreview();
-  refreshQueueStatus();
 });
 
 // ── Swap source ↔ target ─────────────────
@@ -40,7 +39,6 @@ document.getElementById('saveSettings').addEventListener('click', () => {
     const btn = document.getElementById('saveSettings');
     btn.textContent = 'Saved!';
     setTimeout(() => { btn.textContent = 'Save Settings'; }, 1200);
-    refreshQueueStatus();
   });
 });
 
@@ -86,15 +84,14 @@ document.getElementById('translateBtn').addEventListener('click', async () => {
         const label = d.targetKey === 'cn' ? 'Pinyin' : 'Romaji';
         html += '<div class="result-pron">' + label + ': ' + esc(d.pronunciation) + '</div>';
       }
-      const queueResult = await queueTranslationFromPopup(d);
-      if (queueResult.ok) {
-        html += '<div class="result-meta">Queued → ' + esc(queueResult.note.filePath) + '</div>';
-      } else if (queueResult.error) {
-        html += '<div class="result-meta">' + esc(queueResult.error) + '</div>';
+      const saveResult = await saveTranslationFromPopup(d);
+      if (saveResult.ok) {
+        html += '<div class="result-meta">Saved → ' + esc(saveResult.note.filePath) + '</div>';
+      } else if (saveResult.error) {
+        html += '<div class="result-meta">' + esc(saveResult.error) + '</div>';
       }
       result.innerHTML = html;
       result.classList.add('active');
-      refreshQueueStatus();
     } else {
       result.innerHTML = '<div class="result-meta">Error</div>' + esc(response?.error || 'Unknown error');
       result.classList.add('active');
@@ -113,27 +110,6 @@ document.getElementById('inputText').addEventListener('keydown', (e) => {
     e.preventDefault();
     document.getElementById('translateBtn').click();
   }
-});
-
-document.getElementById('flushOneBtn').addEventListener('click', async () => {
-  await runQueueAction('one');
-});
-
-document.getElementById('flushAllBtn').addEventListener('click', async () => {
-  await runQueueAction('all');
-});
-
-document.getElementById('clearQueueBtn').addEventListener('click', async () => {
-  const response = await chrome.runtime.sendMessage({ action: 'clearPendingNotes' });
-  const result = document.getElementById('resultArea');
-  if (response?.data) {
-    result.innerHTML = '<div class="result-meta">Queue</div>Cleared pending queue.';
-    result.classList.add('active');
-  } else {
-    result.innerHTML = '<div class="result-meta">Queue Error</div>' + esc(response?.error || 'Failed to clear queue.');
-    result.classList.add('active');
-  }
-  refreshQueueStatus();
 });
 
 function esc(str) {
@@ -174,11 +150,11 @@ async function getActiveTabContext() {
 }
 
 async function saveTranslationFromPopup(data) {
-  return queueTranslationFromPopup(data);
-}
-
-async function queueTranslationFromPopup(data) {
   const settings = getPopupObsidianSettings();
+  if (!settings.obsidianVault) {
+    return { ok: false, error: 'Not saved: set Obsidian Vault Name first.' };
+  }
+
   const context = await getActiveTabContext();
   const note = PolyglotObsidian.buildTranslationNote(settings, data, {
     now: new Date(),
@@ -186,66 +162,6 @@ async function queueTranslationFromPopup(data) {
     pageUrl: context.pageUrl
   });
 
-  const response = await chrome.runtime.sendMessage({
-    action: 'queuePendingNote',
-    note: {
-      content: note.content,
-      filePath: note.filePath,
-      obsidianVault: settings.obsidianVault || '',
-      source: 'popup'
-    }
-  });
-
-  if (response?.data) {
-    return { ok: true, note: note };
-  }
-  return { ok: false, error: response?.error || 'Queue failed.' };
-}
-
-async function refreshQueueStatus() {
-  const response = await chrome.runtime.sendMessage({ action: 'getPendingNotesSummary' });
-  const countEl = document.getElementById('queueCount');
-  const previewEl = document.getElementById('queuePreview');
-  const flushOneBtn = document.getElementById('flushOneBtn');
-  const flushAllBtn = document.getElementById('flushAllBtn');
-  const clearQueueBtn = document.getElementById('clearQueueBtn');
-
-  if (!response?.data) {
-    countEl.textContent = 'Queue unavailable';
-    previewEl.textContent = response?.error || 'Failed to load queue.';
-    flushOneBtn.disabled = true;
-    flushAllBtn.disabled = true;
-    clearQueueBtn.disabled = true;
-    return;
-  }
-
-  const summary = response.data;
-  countEl.textContent = summary.count + ' queued';
-  previewEl.textContent = summary.latestPath || 'Queue is empty.';
-  flushOneBtn.disabled = summary.count === 0;
-  flushAllBtn.disabled = summary.count === 0;
-  clearQueueBtn.disabled = summary.count === 0;
-}
-
-async function runQueueAction(mode) {
-  const response = await chrome.runtime.sendMessage({
-    action: 'flushPendingNotes',
-    mode: mode
-  });
-  const result = document.getElementById('resultArea');
-
-  if (response?.data) {
-    const flushedCount = response.data.flushedCount || 0;
-    const remainingCount = response.data.remainingCount || 0;
-    result.innerHTML = '<div class="result-meta">Queue</div>'
-      + 'Opened ' + esc(String(flushedCount)) + ' queued note'
-      + (flushedCount === 1 ? '' : 's')
-      + ' for Obsidian. Remaining: ' + esc(String(remainingCount));
-    result.classList.add('active');
-  } else {
-    result.innerHTML = '<div class="result-meta">Queue Error</div>' + esc(response?.error || 'Failed to open Obsidian.');
-    result.classList.add('active');
-  }
-
-  refreshQueueStatus();
+  window.location.href = note.uri;
+  return { ok: true, note: note };
 }
