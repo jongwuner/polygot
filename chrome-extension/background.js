@@ -43,15 +43,84 @@ async function translateText(text, targetKey, sourceKey) {
   const detectedName = CODE_TO_NAME[detectedCode] || detectedCode;
   const targetName = LANG[targetKey]?.name || targetKey;
 
+  // Fetch pronunciation for Chinese (pinyin) and Japanese (romaji)
+  let pronunciation = '';
+  if ((targetKey === 'cn' || targetKey === 'jp') && translated) {
+    pronunciation = await fetchPronunciation(translated, tl);
+  }
+
   return {
     original: text,
     translated: translated,
+    pronunciation: pronunciation,
     sourceLang: detectedName,
     sourceCode: detectedCode,
     targetLang: targetName,
     targetKey: targetKey
   };
 }
+
+// ═══════════════════════════════════════════
+// PRONUNCIATION (pinyin / romaji)
+// Translates target text → English with dt=rm
+// to extract source-side romanization
+// ═══════════════════════════════════════════
+async function fetchPronunciation(text, langCode) {
+  try {
+    const url = 'https://translate.googleapis.com/translate_a/single'
+      + '?client=gtx&sl=' + encodeURIComponent(langCode)
+      + '&tl=en&dt=t&dt=rm&q=' + encodeURIComponent(text);
+
+    const res = await fetch(url);
+    if (!res.ok) return '';
+    const data = await res.json();
+
+    // Method 1: index 3 of each translation segment = source romanization
+    if (data[0]) {
+      let pron = '';
+      for (const seg of data[0]) {
+        if (typeof seg[3] === 'string') pron += seg[3] + ' ';
+      }
+      pron = pron.trim();
+      if (pron) return pron;
+    }
+
+    // Method 2: search dt=rm arrays (typically near end of response)
+    for (let i = data.length - 1; i >= 3; i--) {
+      if (!Array.isArray(data[i])) continue;
+      let found = '';
+      for (const item of data[i]) {
+        if (!Array.isArray(item)) continue;
+        const candidate = item[2] || item[3];
+        if (typeof candidate === 'string' && candidate.length > 0) {
+          found += candidate + ' ';
+        }
+      }
+      found = found.trim();
+      if (found) return found;
+    }
+  } catch (e) {
+    console.error('[Polyglot] Pronunciation fetch failed:', e);
+  }
+  return '';
+}
+
+// ═══════════════════════════════════════════
+// CONTEXT MENU (Right-click)
+// ═══════════════════════════════════════════
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'polyglot-translate',
+    title: 'Polyglot: Translate "%s"',
+    contexts: ['selection']
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== 'polyglot-translate') return;
+  if (!info.selectionText || !tab?.id) return;
+  await translateAndShow(tab.id, info.selectionText.trim());
+});
 
 // ═══════════════════════════════════════════
 // COMMAND HANDLER (Alt+T)
@@ -63,7 +132,6 @@ chrome.commands.onCommand.addListener(async (command) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
 
-    // Get selection from content script
     const response = await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
     if (!response?.text) {
       chrome.tabs.sendMessage(tab.id, {
@@ -74,32 +142,51 @@ chrome.commands.onCommand.addListener(async (command) => {
       return;
     }
 
-    // Get user settings
+    await translateAndShow(tab.id, response.text);
+  } catch (err) {
+    console.error('[Polyglot]', err);
+    notifyError(err);
+  }
+});
+
+// ═══════════════════════════════════════════
+// SHARED: translate + show/save
+// ═══════════════════════════════════════════
+async function translateAndShow(tabId, text) {
+  try {
     const settings = await chrome.storage.sync.get(['sourceLang', 'targetLang']);
     const targetLang = settings.targetLang || 'ko';
     const sourceLang = settings.sourceLang || 'auto';
 
-    // Translate
-    const result = await translateText(response.text, targetLang, sourceLang);
+    const result = await translateText(text, targetLang, sourceLang);
 
-    // Save directly to Obsidian from the current page context.
-    chrome.tabs.sendMessage(tab.id, { action: 'saveTranslationToObsidian', data: result });
+    // Show panel (drag/context-menu) AND save to Obsidian
+    chrome.tabs.sendMessage(tabId, { action: 'showTranslation', data: result });
+    chrome.tabs.sendMessage(tabId, { action: 'saveTranslationToObsidian', data: result });
   } catch (err) {
     console.error('[Polyglot]', err);
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab?.id) {
-        chrome.tabs.sendMessage(tab.id, {
-          action: 'polyglotToast',
-          message: 'Translation failed.',
-          isError: true
-        });
-      }
-    } catch (toastErr) {
-      console.error('[Polyglot]', toastErr);
-    }
+      chrome.tabs.sendMessage(tabId, {
+        action: 'polyglotToast',
+        message: 'Translation failed.',
+        isError: true
+      });
+    } catch (e) { /* ignore */ }
   }
-});
+}
+
+async function notifyError(err) {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      chrome.tabs.sendMessage(tab.id, {
+        action: 'polyglotToast',
+        message: 'Translation failed.',
+        isError: true
+      });
+    }
+  } catch (e) { /* ignore */ }
+}
 
 // ═══════════════════════════════════════════
 // MESSAGE HANDLER (from content script)

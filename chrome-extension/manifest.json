@@ -3,7 +3,7 @@
   "name": "Polyglot Translate",
   "version": "1.0.0",
   "description": "Select text and press a shortcut to translate and send it to Obsidian",
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "contextMenus"],
   "host_permissions": ["https://translate.googleapis.com/*"],
   "commands": {
     "translate-selection": {

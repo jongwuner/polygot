@@ -122,6 +122,7 @@ function triggerTranslate() {
   chrome.runtime.sendMessage({ action: 'translate', text }, (response) => {
     if (response?.data) {
       showPanel(response.data);
+      saveToObsidian(response.data, { silent: true });
     } else {
       showPageToast(response?.error || 'Translation failed.', true);
     }
@@ -174,6 +175,13 @@ function showPanel(data) {
 .pg-translated{font-size:15px;color:#e8e6e3;line-height:1.7;
   padding:10px 12px;background:rgba(78,205,196,0.05);border-radius:8px;
   border-left:3px solid #c084fc}
+.pg-pronunciation{
+  margin-top:6px;padding:6px 12px;
+  background:rgba(251,191,36,0.06);border-radius:6px;border-left:3px solid #fbbf24;
+  font-size:13px;color:#fbbf24;font-style:italic;line-height:1.5;
+  font-family:'Courier New',monospace;letter-spacing:0.02em}
+.pg-pron-label{font-size:9px;color:#72717a;text-transform:uppercase;letter-spacing:0.06em;
+  margin-bottom:2px;font-style:normal;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
 .pg-actions{display:flex;gap:6px;padding:0 16px 14px}
 .pg-btn{flex:1;padding:8px 12px;border:1px solid #2a2a32;border-radius:8px;
   background:#16161a;color:#72717a;cursor:pointer;font-size:12px;font-weight:500;
@@ -198,6 +206,7 @@ function showPanel(data) {
     <div class="pg-section">
       <div class="pg-label">Translation</div>
       <div class="pg-translated">${esc(data.translated)}</div>
+      ${data.pronunciation ? `<div class="pg-pronunciation"><div class="pg-pron-label">${data.targetKey === 'cn' ? 'Pinyin' : 'Romaji'}</div>${esc(data.pronunciation)}</div>` : ''}
     </div>
   </div>
   <div class="pg-actions">
@@ -328,15 +337,19 @@ function saveToObsidian(data, options) {
     // File path: 4. Archive/영어/polygot/2026-03-14/2026-03-14_1430_example-com.md
     const filePath = base + '/' + langFolder + '/polygot/' + date + '/' + date + '_' + hhmm + '_' + site;
 
-    const content = [
+    const lines = [
       '#### ' + data.sourceLang + ' → ' + data.targetLang + '  |  ' + date + ' ' + time,
       '',
       '> ' + data.original.replace(/\n/g, '\n> '),
       '',
-      data.translated,
-      '',
-      '*Source: [' + pageTitle + '](' + pageUrl + ')*'
-    ].join('\n');
+      data.translated
+    ];
+    if (data.pronunciation) {
+      const label = data.targetKey === 'cn' ? 'Pinyin' : 'Romaji';
+      lines.push('', '*' + label + ': ' + data.pronunciation + '*');
+    }
+    lines.push('', '*Source: [' + pageTitle + '](' + pageUrl + ')*');
+    const content = lines.join('\n');
 
     const uri = 'obsidian://new?vault=' + encodeURIComponent(vault)
       + '&file=' + encodeURIComponent(filePath)

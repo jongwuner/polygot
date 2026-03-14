@@ -78,9 +78,13 @@ document.getElementById('translateBtn').addEventListener('click', async () => {
     const result = document.getElementById('resultArea');
     if (response?.data) {
       const d = response.data;
-      result.innerHTML =
-        '<div class="result-meta">' + esc(d.sourceLang) + ' → ' + esc(d.targetLang) + '</div>' +
+      let html = '<div class="result-meta">' + esc(d.sourceLang) + ' → ' + esc(d.targetLang) + '</div>' +
         esc(d.translated);
+      if (d.pronunciation) {
+        const label = d.targetKey === 'cn' ? 'Pinyin' : 'Romaji';
+        html += '<div class="result-pron">' + label + ': ' + esc(d.pronunciation) + '</div>';
+      }
+      result.innerHTML = html;
       result.classList.add('active');
     } else {
       result.innerHTML = '<div class="result-meta">Error</div>' + esc(response?.error || 'Unknown error');
