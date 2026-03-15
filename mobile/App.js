@@ -10,19 +10,21 @@ import {
   CLIENT_RELEASES,
   COLORS,
   DEFAULT_AI_PROMPT,
+  DEFAULT_QUIZ_PROMPT,
   DEFAULT_SETTINGS,
   INPUT_PLACEHOLDER,
   LANGUAGES,
   SOURCE_LANGUAGE_OPTIONS,
   TARGET_LANGUAGE_OPTIONS,
 } from './src/constants';
-import { getLocalLlmStatus, inspectLocalModel, releaseLocalModel, runLocalNoteAnalysis } from './src/services/localLlm';
+import { generateLocalQuizDeck, getLocalLlmStatus, inspectLocalModel, releaseLocalModel, runLocalNoteAnalysis } from './src/services/localLlm';
 import { deleteImportedNote, importLocalModelFile, importMarkdownNotes, loadImportedNoteContent } from './src/services/obsidianFiles';
+import { buildQuizDeck, mergeQuizDecks } from './src/services/quiz';
 import { loadHistory, loadNotes, loadSettings, prependHistoryEntry, prependNotes, saveHistory, saveNotes, saveSettings } from './src/services/storage';
 import { translateText } from './src/services/translate';
 import { buildPathPreview, buildTranslationNote } from './src/utils/obsidian';
 
-const TABS = ['translate', 'history', 'notes', 'ai', 'settings'];
+const TABS = ['translate', 'history', 'notes', 'quiz', 'ai', 'settings'];
 const FONT = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
 
 export default function App() {
@@ -38,10 +40,21 @@ export default function App() {
   const [notesBusy, setNotesBusy] = useState(false);
   const [modelBusy, setModelBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [quizBusy, setQuizBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_AI_PROMPT);
+  const [quizPrompt, setQuizPrompt] = useState(DEFAULT_QUIZ_PROMPT);
   const [aiOutput, setAiOutput] = useState('');
   const [modelInfo, setModelInfo] = useState(null);
+  const [quizDeck, setQuizDeck] = useState([]);
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [quizReveal, setQuizReveal] = useState(false);
+  const [quizScore, setQuizScore] = useState(0);
+  const [quizStreak, setQuizStreak] = useState(0);
+  const [quizBestStreak, setQuizBestStreak] = useState(0);
+  const [quizXp, setQuizXp] = useState(0);
+  const [quizMode, setQuizMode] = useState('fallback');
+  const [quizFinished, setQuizFinished] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -118,6 +131,37 @@ export default function App() {
 
   function updateSetting(key, value) {
     setSettings((state) => ({ ...state, [key]: value }));
+  }
+
+  async function resolveNoteContext(noteOverride = null) {
+    const note = noteOverride || notes.find((item) => item.id === settings.selectedNoteId) || null;
+
+    if (!note) {
+      return { note: null, content: '' };
+    }
+
+    if (note.id === settings.selectedNoteId && selectedNoteContent) {
+      return { note, content: selectedNoteContent };
+    }
+
+    const content = await loadImportedNoteContent(note);
+    if (note.id === settings.selectedNoteId || noteOverride) {
+      setSelectedNoteContent(content);
+    }
+
+    return { note, content };
+  }
+
+  function resetQuizSession(deck, mode) {
+    setQuizDeck(deck);
+    setQuizIndex(0);
+    setQuizReveal(false);
+    setQuizScore(0);
+    setQuizStreak(0);
+    setQuizBestStreak(0);
+    setQuizXp(0);
+    setQuizMode(mode);
+    setQuizFinished(false);
   }
 
   async function onTranslate() {
@@ -248,9 +292,13 @@ export default function App() {
     setAiBusy(true);
     setAiOutput('');
     try {
+      const { note, content } = await resolveNoteContext();
+      if (!note) {
+        throw new Error('Import and select an Obsidian note first.');
+      }
       const result = await runLocalNoteAnalysis({
         modelUri: settings.llmModelUri,
-        noteContent: selectedNoteContent,
+        noteContent: content,
         instruction: aiPrompt,
         n_ctx: settings.llmContextSize,
         n_predict: settings.llmMaxTokens,
@@ -268,6 +316,98 @@ export default function App() {
     } finally {
       setAiBusy(false);
     }
+  }
+
+  async function handleGenerateQuiz(mode = 'smart', noteOverride = null) {
+    const targetNoteId = noteOverride?.id || settings.selectedNoteId;
+    if (!targetNoteId) {
+      setTab('notes');
+      setNotice('Import and select an Obsidian note first.');
+      return;
+    }
+
+    setQuizBusy(true);
+    try {
+      if (noteOverride && settings.selectedNoteId !== noteOverride.id) {
+        setSettings((state) => ({
+          ...state,
+          selectedNoteId: noteOverride.id,
+        }));
+      }
+
+      const { note, content } = await resolveNoteContext(noteOverride);
+      if (!note) {
+        throw new Error('Import and select an Obsidian note first.');
+      }
+
+      const fallbackDeck = buildQuizDeck(note, content);
+      let deck = fallbackDeck;
+      let deckMode = 'fallback';
+
+      if (mode !== 'fallback' && settings.llmModelUri && Platform.OS !== 'web') {
+        try {
+          const aiDeck = await generateLocalQuizDeck({
+            modelUri: settings.llmModelUri,
+            noteContent: content,
+            noteName: note?.name,
+            instruction: quizPrompt,
+            n_ctx: settings.llmContextSize,
+            n_predict: settings.llmMaxTokens,
+            n_gpu_layers: settings.llmGpuLayers,
+            onStatus: setNotice,
+          });
+          deck = mergeQuizDecks(fallbackDeck, aiDeck);
+          deckMode = 'ai-remix';
+        } catch (error) {
+          setNotice(error.message || 'AI quiz failed. Falling back to note-only deck.');
+        }
+      } else if (mode !== 'fallback') {
+        setNotice('AI remix needs a loaded GGUF model in a native build. Using note-only deck.');
+      }
+
+      resetQuizSession(deck, deckMode);
+      setTab('quiz');
+      setNotice(`Quiz ready: ${deck.length} cards.`);
+    } catch (error) {
+      setNotice(error.message || 'Quiz generation failed.');
+    } finally {
+      setQuizBusy(false);
+    }
+  }
+
+  function handleQuizReveal() {
+    if (!quizDeck.length) return;
+    setQuizReveal(true);
+  }
+
+  function handleQuizResult(correct) {
+    if (!quizDeck.length || quizFinished) return;
+
+    const nextStreak = correct ? quizStreak + 1 : 0;
+    const nextBest = correct ? Math.max(quizBestStreak, nextStreak) : quizBestStreak;
+    const xpGain = correct ? 12 + quizStreak * 3 : 3;
+
+    setQuizScore((value) => value + (correct ? 1 : 0));
+    setQuizStreak(nextStreak);
+    setQuizBestStreak(nextBest);
+    setQuizXp((value) => value + xpGain);
+
+    const isLast = quizIndex >= quizDeck.length - 1;
+    if (isLast) {
+      setQuizFinished(true);
+      setQuizReveal(true);
+      setNotice(correct ? 'Quiz cleared. Clean finish.' : 'Quiz cleared. One more loop and you own it.');
+      return;
+    }
+
+    setQuizIndex((value) => value + 1);
+    setQuizReveal(false);
+  }
+
+  function handleQuizRestart() {
+    if (!quizDeck.length) return;
+    resetQuizSession(quizDeck, quizMode);
+    setNotice('Quiz restarted.');
   }
 
   if (!ready) {
@@ -288,6 +428,8 @@ export default function App() {
   const previewCode = current?.sourceCode || (settings.sourceLang === 'auto' ? LANGUAGES.ko.code : LANGUAGES[settings.sourceLang].code);
   const pathPreview = current ? makeTranslationNote(current, settings).filePath : buildPathPreview(settings, previewCode);
   const selectedNote = notes.find((note) => note.id === settings.selectedNoteId) || null;
+  const currentQuiz = quizDeck[quizIndex] || null;
+  const quizProgress = quizDeck.length ? `${Math.min(quizIndex + 1, quizDeck.length)} / ${quizDeck.length}` : '0 / 0';
 
   return (
     <SafeAreaProvider>
@@ -299,7 +441,7 @@ export default function App() {
               <Text style={[styles.kicker, styles.kickerDark]}>Mobile translation + note intelligence</Text>
               <Text style={[styles.title, styles.titleDark]}>Polyglot</Text>
               <Text style={styles.heroText}>
-                Import Obsidian markdown from the phone, keep your translation workspace, and run note analysis with an on-device GGUF model in a native build.
+                Bring in Obsidian archive notes, turn them into playful review quizzes, and keep translation plus on-device GGUF analysis in one mobile workspace.
               </Text>
               <Text style={styles.heroMeta}>WEB v{CLIENT_RELEASES.web}  |  EXT v{CLIENT_RELEASES.extension}  |  APP v{CLIENT.version}</Text>
             </View>
@@ -386,7 +528,7 @@ export default function App() {
                     <Action label={notesBusy ? 'Importing...' : 'Import .md'} tone="solid" disabled={notesBusy} onPress={handleImportNotes} />
                   </View>
                   <Text style={styles.subtle}>
-                    Pick markdown files from the phone. Obsidian notes are copied into the app sandbox so they can be reopened later.
+                    Pick markdown files from the phone. Obsidian notes are copied into the app sandbox so they can be reopened later and turned into review quiz decks.
                   </Text>
                 </View>
 
@@ -400,7 +542,7 @@ export default function App() {
                       <Text style={styles.snippet}>{note.preview || '(empty note)'}</Text>
                       <View style={styles.row}>
                         <Action label="Open" tone="soft" onPress={() => setSettings((state) => ({ ...state, selectedNoteId: note.id }))} />
-                        <Action label="Copy" tone="soft" onPress={() => copyText(note.preview || note.name, 'Preview')} />
+                        <Action label="Quick quiz" tone="soft" disabled={quizBusy} onPress={() => handleGenerateQuiz('fallback', note)} />
                         <Action label="Delete" tone="ghost" onPress={() => handleDeleteNote(note)} />
                       </View>
                     </View>
@@ -416,6 +558,86 @@ export default function App() {
                     </>
                   ) : (
                     <Text style={styles.subtle}>Select a note to preview its markdown.</Text>
+                  )}
+                </View>
+              </>
+            ) : null}
+
+            {tab === 'quiz' ? (
+              <>
+                <View style={[styles.card, styles.dark]}>
+                  <Text style={[styles.label, styles.labelDark]}>Review arena</Text>
+                  <Text style={styles.darkLine}>{selectedNote ? selectedNote.name : 'No note selected'}</Text>
+                  <Text style={styles.darkLine}>
+                    Deck mode: {quizMode === 'ai-remix' ? 'AI remix' : 'Note-only'}  |  Progress: {quizProgress}
+                  </Text>
+                  <View style={styles.row}>
+                    <Action label={quizBusy ? 'Building...' : 'Quick deck'} tone="soft" disabled={quizBusy || !selectedNote} onPress={() => handleGenerateQuiz('fallback')} />
+                    <Action label={quizBusy ? 'Building...' : 'AI remix'} tone="solid" disabled={quizBusy || !selectedNote} onPress={() => handleGenerateQuiz('smart')} />
+                    <Action label="Restart" tone="ghost" disabled={!quizDeck.length} onPress={handleQuizRestart} />
+                  </View>
+                </View>
+
+                <View style={styles.card}>
+                  <Text style={styles.label}>Quiz direction</Text>
+                  <Text style={styles.subtle}>
+                    Quick deck builds straight from markdown structure. AI remix uses the selected GGUF model to reshuffle the note into shorter, punchier review cards.
+                  </Text>
+                  <TextInput
+                    value={quizPrompt}
+                    onChangeText={setQuizPrompt}
+                    multiline
+                    textAlignVertical="top"
+                    style={styles.inputLarge}
+                    placeholder="Tell the quiz builder how playful or strict the review session should be."
+                    placeholderTextColor={COLORS.inkSoft}
+                  />
+                </View>
+
+                <View style={styles.card}>
+                  <View style={styles.split}>
+                    <Text style={styles.label}>Session stats</Text>
+                    <Text style={styles.link}>{quizProgress}</Text>
+                  </View>
+                  <View style={styles.scoreRow}>
+                    <StatPill label="Score" value={`${quizScore}/${quizDeck.length || 0}`} />
+                    <StatPill label="Streak" value={String(quizStreak)} />
+                    <StatPill label="Best" value={String(quizBestStreak)} />
+                    <StatPill label="XP" value={String(quizXp)} />
+                  </View>
+                  <Text style={styles.subtle}>
+                    Reveal a card, mark it right or missed, and loop again until the archive note feels automatic.
+                  </Text>
+                </View>
+
+                <View style={styles.card}>
+                  {currentQuiz ? (
+                    <>
+                      <Text style={styles.quizTitle}>{currentQuiz.title}</Text>
+                      <Text style={styles.quizPrompt}>{currentQuiz.prompt}</Text>
+                      {currentQuiz.hint ? <Text style={styles.subtle}>Hint: {currentQuiz.hint}</Text> : null}
+                      {quizReveal ? (
+                        <Text style={styles.quizAnswer}>{currentQuiz.answer}</Text>
+                      ) : (
+                        <Text style={styles.subtle}>Try answering before you reveal the note-backed answer.</Text>
+                      )}
+                      {quizFinished ? (
+                        <Text style={styles.subtle}>Deck cleared. Restart the session or remix the same note with AI for a rougher second pass.</Text>
+                      ) : null}
+                      {quizReveal && currentQuiz.source ? <Text style={styles.note}>{currentQuiz.source}</Text> : null}
+                      <View style={styles.row}>
+                        <Action label={quizReveal ? 'Revealed' : 'Reveal'} tone="soft" disabled={quizReveal} onPress={handleQuizReveal} />
+                        <Action label="Correct" tone="solid" disabled={!quizReveal || quizFinished} onPress={() => handleQuizResult(true)} />
+                        <Action label="Miss" tone="ghost" disabled={!quizReveal || quizFinished} onPress={() => handleQuizResult(false)} />
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.quizTitle}>No deck yet</Text>
+                      <Text style={styles.subtle}>
+                        Select an imported Obsidian note, then build a quick deck or use AI remix to make the review more varied.
+                      </Text>
+                    </>
                   )}
                 </View>
               </>
@@ -536,6 +758,15 @@ function Action({ label, onPress, tone, disabled }) {
   return <Pressable disabled={disabled} onPress={onPress} style={[styles.action, style, disabled && styles.actionDisabled]}><Text style={[styles.actionText, tone === 'solid' && styles.actionTextSolid, disabled && styles.actionTextDisabled]}>{label}</Text></Pressable>;
 }
 
+function StatPill({ label, value }) {
+  return (
+    <View style={styles.statPill}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: COLORS.canvas },
@@ -568,6 +799,10 @@ const styles = StyleSheet.create({
   editor: { minHeight: 170, borderRadius: 18, borderWidth: 1, borderColor: COLORS.lineStrong, backgroundColor: COLORS.canvas, padding: 14, color: COLORS.ink, fontSize: 16, lineHeight: 24 },
   input: { borderRadius: 18, borderWidth: 1, borderColor: COLORS.lineStrong, backgroundColor: COLORS.canvas, paddingHorizontal: 14, paddingVertical: 12, color: COLORS.ink, fontSize: 15 },
   inputLarge: { minHeight: 120, borderRadius: 18, borderWidth: 1, borderColor: COLORS.lineStrong, backgroundColor: COLORS.canvas, paddingHorizontal: 14, paddingVertical: 12, color: COLORS.ink, fontSize: 15, lineHeight: 22 },
+  scoreRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  statPill: { minWidth: 86, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 18, backgroundColor: COLORS.canvas, borderWidth: 1, borderColor: COLORS.lineStrong, gap: 4 },
+  statLabel: { color: COLORS.inkSoft, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.7 },
+  statValue: { color: COLORS.ink, fontSize: 20, lineHeight: 24, fontWeight: '700' },
   action: { minWidth: 108, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 999, borderWidth: 1, alignItems: 'center' },
   actionSolid: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   actionSoft: { backgroundColor: COLORS.skySoft, borderColor: COLORS.sky },
@@ -580,6 +815,9 @@ const styles = StyleSheet.create({
   pronunciation: { color: '#f0c9bd', fontSize: 14, lineHeight: 20 },
   path: { color: COLORS.ink, fontWeight: '700', lineHeight: 20 },
   note: { backgroundColor: COLORS.cardStrong, color: '#f6eadf', borderRadius: 18, padding: 14, lineHeight: 20 },
+  quizTitle: { color: COLORS.ink, fontSize: 24, lineHeight: 30, fontFamily: FONT },
+  quizPrompt: { color: COLORS.ink, fontSize: 17, lineHeight: 26, fontWeight: '600' },
+  quizAnswer: { color: COLORS.mint, fontSize: 16, lineHeight: 24, fontWeight: '700' },
   subtle: { color: COLORS.inkSoft, lineHeight: 20 },
   historyItem: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingTop: 16, gap: 8 },
   selectedItem: { borderTopColor: COLORS.accent },

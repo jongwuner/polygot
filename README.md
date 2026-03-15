@@ -4,7 +4,7 @@ Polyglot is a multi-client translation project with three active surfaces:
 
 - a web editor for quick multilingual notes
 - a Chrome extension for translating page selections into Obsidian-ready notes
-- an Expo / React Native mobile app for translation, local history, and note staging
+- an Expo / React Native mobile app for translation, local history, Obsidian note review, and playful quiz sessions
 
 ## Clients
 
@@ -23,7 +23,7 @@ Polyglot is a multi-client translation project with three active surfaces:
 ### React Native mobile app
 
 - Location: `mobile/`
-- Purpose: mobile translation workspace with local history and Obsidian note preview
+- Purpose: mobile translation workspace with local history, Obsidian note preview, and archive review quizzes
 - Release notes: [`docs/release-notes/mobile.md`](docs/release-notes/mobile.md)
 
 ## Repository layout
@@ -60,6 +60,9 @@ The mobile client includes:
 - local translation history with AsyncStorage
 - Obsidian note generation, markdown copy, share, and deep-link launch
 - markdown note import from Obsidian files on the phone
+- quiz deck generation from imported Obsidian review notes
+- streak and XP tracking for repeat review sessions
+- optional local-model quiz remix for native builds
 - local GGUF model hookup for native on-device note analysis
 
 ## Web and extension

@@ -1,6 +1,6 @@
 export const CLIENT = {
   name: 'Polyglot Mobile',
-  version: '1.1.0',
+  version: '1.2.0',
 };
 
 export const CLIENT_RELEASES = {
@@ -110,6 +110,8 @@ export const NOTE_LIMIT = 20;
 export const MAX_NOTE_CHARS_FOR_LLM = 6000;
 export const DEFAULT_AI_PROMPT =
   'Summarize this Obsidian note, extract action items, and answer in concise markdown.';
+export const DEFAULT_QUIZ_PROMPT =
+  'Create a playful review quiz from this note with short recall, cloze, and challenge questions.';
 
 export const INPUT_PLACEHOLDER =
   'Paste or type text here. Translate it, then stage an Obsidian-ready note.';

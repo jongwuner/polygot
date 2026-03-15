@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
-import { DEFAULT_AI_PROMPT, MAX_NOTE_CHARS_FOR_LLM } from '../constants';
+import { DEFAULT_AI_PROMPT, DEFAULT_QUIZ_PROMPT, MAX_NOTE_CHARS_FOR_LLM } from '../constants';
+import { normalizeQuizDeck } from './quiz';
 
 let cachedContext = null;
 let cachedModelUri = null;
@@ -104,6 +105,87 @@ export async function runLocalNoteAnalysis({
   };
 }
 
+export async function generateLocalQuizDeck({
+  modelUri,
+  noteContent,
+  noteName,
+  instruction = DEFAULT_QUIZ_PROMPT,
+  n_ctx = 2048,
+  n_predict = 768,
+  n_gpu_layers = 99,
+  onStatus,
+}) {
+  if (!modelUri) {
+    throw new Error('Select a GGUF model first.');
+  }
+
+  const cleanNote = String(noteContent || '').trim();
+  if (!cleanNote) {
+    throw new Error('Select a note first.');
+  }
+
+  const llama = await getLlamaModule();
+  const context = await getOrCreateContext(llama, modelUri, { n_ctx, n_gpu_layers }, onStatus);
+  const { prompt } = buildNotePrompt(cleanNote, instruction);
+
+  onStatus?.('Generating quiz cards...');
+
+  const schema = {
+    type: 'object',
+    properties: {
+      quiz: {
+        type: 'array',
+        minItems: 4,
+        maxItems: 8,
+        items: {
+          type: 'object',
+          properties: {
+            type: { type: 'string' },
+            prompt: { type: 'string' },
+            answer: { type: 'string' },
+            hint: { type: 'string' },
+            source: { type: 'string' },
+          },
+          required: ['prompt', 'answer'],
+        },
+      },
+    },
+    required: ['quiz'],
+  };
+
+  const result = await context.completion({
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Create a fun review quiz from the provided Obsidian note. Use short prompts, keep answers concise, and mix cloze, recall, and boss-round cards.',
+      },
+      {
+        role: 'user',
+        content: `Note name: ${noteName || 'Imported note'}\n\n${prompt}`,
+      },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        schema,
+      },
+    },
+    n_predict,
+    temperature: 0.4,
+    stop: ['</s>', '<|end|>', '<|eot_id|>', '<|end_of_text|>'],
+  });
+
+  const parsed = parseJsonResponse(result?.text || '');
+  const deck = normalizeQuizDeck(parsed?.quiz);
+
+  if (!deck.length) {
+    throw new Error('The local model did not return usable quiz cards.');
+  }
+
+  return deck;
+}
+
 export async function releaseLocalModel() {
   if (cachedContext) {
     await cachedContext.release();
@@ -122,6 +204,32 @@ async function getLlamaModule() {
   } catch (error) {
     throw new Error('Local LLM runtime is unavailable. Build a native development client first.');
   }
+}
+
+async function getOrCreateContext(llama, modelUri, { n_ctx, n_gpu_layers }, onStatus) {
+  if (cachedContext && cachedModelUri !== modelUri) {
+    await cachedContext.release();
+    cachedContext = null;
+    cachedModelUri = null;
+  }
+
+  if (!cachedContext) {
+    onStatus?.('Loading model...');
+    cachedContext = await llama.initLlama(
+      {
+        model: modelUri,
+        use_mlock: false,
+        n_ctx,
+        n_gpu_layers,
+      },
+      (progress) => {
+        onStatus?.(`Loading model ${Math.round(progress * 100)}%`);
+      }
+    );
+    cachedModelUri = modelUri;
+  }
+
+  return cachedContext;
 }
 
 function buildNotePrompt(noteContent, instruction) {
@@ -144,4 +252,20 @@ function buildNotePrompt(noteContent, instruction) {
     prompt,
     wasTrimmed,
   };
+}
+
+function parseJsonResponse(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return JSON.parse(raw.slice(start, end + 1));
+    }
+    throw error;
+  }
 }
