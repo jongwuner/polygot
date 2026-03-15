@@ -1,5 +1,12 @@
 # React Native Mobile Release Notes
 
+## v1.1.0 - 2026-03-15
+
+- Added Obsidian markdown import so notes can be picked from the phone and reopened inside the app.
+- Added a dedicated AI workflow for selected notes.
+- Added GGUF model import and `llama.rn` integration scaffolding for on-device local inference in native development builds.
+- Added local model settings for context size, output tokens, and GPU layer offload.
+
 ## v1.0.0 - 2026-03-15
 
 - Shipped the first Expo / React Native mobile client.

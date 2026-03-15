@@ -1,6 +1,6 @@
 export const CLIENT = {
   name: 'Polyglot Mobile',
-  version: '1.0.0',
+  version: '1.1.0',
 };
 
 export const CLIENT_RELEASES = {
@@ -88,6 +88,7 @@ export const ARCHIVE_LANGUAGE_OPTIONS = ['auto', 'Korean', 'English', 'Japanese'
 export const STORAGE_KEYS = {
   settings: 'polyglot_mobile_settings',
   history: 'polyglot_mobile_history',
+  notes: 'polyglot_mobile_notes',
 };
 
 export const DEFAULT_SETTINGS = {
@@ -96,9 +97,19 @@ export const DEFAULT_SETTINGS = {
   vaultName: '',
   archiveBase: '4. Archive',
   archiveLang: 'auto',
+  selectedNoteId: '',
+  llmModelUri: '',
+  llmModelName: '',
+  llmContextSize: 2048,
+  llmMaxTokens: 512,
+  llmGpuLayers: 99,
 };
 
 export const HISTORY_LIMIT = 50;
+export const NOTE_LIMIT = 20;
+export const MAX_NOTE_CHARS_FOR_LLM = 6000;
+export const DEFAULT_AI_PROMPT =
+  'Summarize this Obsidian note, extract action items, and answer in concise markdown.';
 
 export const INPUT_PLACEHOLDER =
   'Paste or type text here. Translate it, then stage an Obsidian-ready note.';

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { DEFAULT_SETTINGS, HISTORY_LIMIT, STORAGE_KEYS } from '../constants';
+import { DEFAULT_SETTINGS, HISTORY_LIMIT, NOTE_LIMIT, STORAGE_KEYS } from '../constants';
 
 export async function loadSettings() {
   try {
@@ -60,4 +60,46 @@ export async function saveHistory(history) {
 
 export function prependHistoryEntry(history, entry) {
   return [entry, ...(history || []).filter((item) => item?.id !== entry.id)].slice(0, HISTORY_LIMIT);
+}
+
+export async function loadNotes() {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEYS.notes);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((item) => item && typeof item === 'object');
+  } catch (error) {
+    return [];
+  }
+}
+
+export async function saveNotes(notes) {
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.notes,
+    JSON.stringify(Array.isArray(notes) ? notes.slice(0, NOTE_LIMIT) : [])
+  );
+}
+
+export function prependNotes(notes, entries) {
+  const incoming = Array.isArray(entries) ? entries : [entries];
+  const next = [...incoming, ...(notes || [])];
+  const seen = new Set();
+
+  return next
+    .filter((entry) => {
+      const key = entry?.id || entry?.localUri;
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+    .slice(0, NOTE_LIMIT);
 }

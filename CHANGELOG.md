@@ -6,7 +6,7 @@ Polyglot now tracks version notes per client.
 
 - Web client: [`v1.3.0`](docs/release-notes/web.md)
 - Chrome extension: [`v1.5.1`](docs/release-notes/chrome-extension.md)
-- React Native mobile app: [`v1.0.0`](docs/release-notes/mobile.md)
+- React Native mobile app: [`v1.1.0`](docs/release-notes/mobile.md)
 
 ## Files
 

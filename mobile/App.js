@@ -4,12 +4,25 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 
-import { ARCHIVE_LANGUAGE_OPTIONS, CLIENT, CLIENT_RELEASES, COLORS, DEFAULT_SETTINGS, INPUT_PLACEHOLDER, LANGUAGES, SOURCE_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS } from './src/constants';
-import { loadHistory, loadSettings, prependHistoryEntry, saveHistory, saveSettings } from './src/services/storage';
+import {
+  ARCHIVE_LANGUAGE_OPTIONS,
+  CLIENT,
+  CLIENT_RELEASES,
+  COLORS,
+  DEFAULT_AI_PROMPT,
+  DEFAULT_SETTINGS,
+  INPUT_PLACEHOLDER,
+  LANGUAGES,
+  SOURCE_LANGUAGE_OPTIONS,
+  TARGET_LANGUAGE_OPTIONS,
+} from './src/constants';
+import { getLocalLlmStatus, inspectLocalModel, releaseLocalModel, runLocalNoteAnalysis } from './src/services/localLlm';
+import { deleteImportedNote, importLocalModelFile, importMarkdownNotes, loadImportedNoteContent } from './src/services/obsidianFiles';
+import { loadHistory, loadNotes, loadSettings, prependHistoryEntry, prependNotes, saveHistory, saveNotes, saveSettings } from './src/services/storage';
 import { translateText } from './src/services/translate';
 import { buildPathPreview, buildTranslationNote } from './src/utils/obsidian';
 
-const TABS = ['translate', 'history', 'settings'];
+const TABS = ['translate', 'history', 'notes', 'ai', 'settings'];
 const FONT = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
 
 export default function App() {
@@ -17,33 +30,95 @@ export default function App() {
   const [tab, setTab] = useState('translate');
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [history, setHistory] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [selectedNoteContent, setSelectedNoteContent] = useState('');
   const [input, setInput] = useState('');
   const [current, setCurrent] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [notesBusy, setNotesBusy] = useState(false);
+  const [modelBusy, setModelBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [aiPrompt, setAiPrompt] = useState(DEFAULT_AI_PROMPT);
+  const [aiOutput, setAiOutput] = useState('');
+  const [modelInfo, setModelInfo] = useState(null);
 
   useEffect(() => {
     let live = true;
-    Promise.all([loadSettings(), loadHistory()]).then(([savedSettings, savedHistory]) => {
-      if (!live) return;
-      setSettings(savedSettings);
-      setHistory(savedHistory);
-      setReady(true);
-    }).catch(() => {
-      if (!live) return;
-      setNotice('Failed to load local data.');
-      setReady(true);
-    });
-    return () => { live = false; };
+    Promise.all([loadSettings(), loadHistory(), loadNotes()])
+      .then(([savedSettings, savedHistory, savedNotes]) => {
+        if (!live) return;
+        setSettings(savedSettings);
+        setHistory(savedHistory);
+        setNotes(savedNotes);
+        setReady(true);
+      })
+      .catch(() => {
+        if (!live) return;
+        setNotice('Failed to load local data.');
+        setReady(true);
+      });
+
+    return () => {
+      live = false;
+      releaseLocalModel().catch(() => {});
+    };
   }, []);
 
-  useEffect(() => { if (ready) saveSettings(settings).catch(() => setNotice('Could not save settings.')); }, [ready, settings]);
-  useEffect(() => { if (ready) saveHistory(history).catch(() => setNotice('Could not save history.')); }, [ready, history]);
+  useEffect(() => {
+    if (ready) {
+      saveSettings(settings).catch(() => setNotice('Could not save settings.'));
+    }
+  }, [ready, settings]);
+
+  useEffect(() => {
+    if (ready) {
+      saveHistory(history).catch(() => setNotice('Could not save history.'));
+    }
+  }, [ready, history]);
+
+  useEffect(() => {
+    if (ready) {
+      saveNotes(notes).catch(() => setNotice('Could not save imported notes.'));
+    }
+  }, [ready, notes]);
+
+  useEffect(() => {
+    let live = true;
+    const selectedNote = notes.find((note) => note.id === settings.selectedNoteId);
+
+    if (!selectedNote) {
+      setSelectedNoteContent('');
+      return () => {
+        live = false;
+      };
+    }
+
+    loadImportedNoteContent(selectedNote)
+      .then((content) => {
+        if (!live) return;
+        setSelectedNoteContent(content);
+      })
+      .catch(() => {
+        if (!live) return;
+        setSelectedNoteContent('');
+        setNotice('Could not load the selected note.');
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [notes, settings.selectedNoteId]);
+
   useEffect(() => {
     if (!notice) return undefined;
-    const id = setTimeout(() => setNotice(''), 2800);
+    const id = setTimeout(() => setNotice(''), 3200);
     return () => clearTimeout(id);
   }, [notice]);
+
+  function updateSetting(key, value) {
+    setSettings((state) => ({ ...state, [key]: value }));
+  }
 
   async function onTranslate() {
     if (!input.trim()) {
@@ -70,10 +145,6 @@ export default function App() {
     }
   }
 
-  function updateSetting(key, value) {
-    setSettings((state) => ({ ...state, [key]: value }));
-  }
-
   async function copyText(value, label) {
     if (!value) return;
     await Clipboard.setStringAsync(value);
@@ -82,7 +153,7 @@ export default function App() {
 
   async function shareNote() {
     if (!current) return;
-    const note = makeNote(current, settings);
+    const note = makeTranslationNote(current, settings);
     await Share.share({ message: `${note.content}\n\nPath: ${note.filePath}` });
   }
 
@@ -93,7 +164,110 @@ export default function App() {
       setNotice('Set a vault name first.');
       return;
     }
-    await Linking.openURL(makeNote(current, settings).uri).catch(() => setNotice('Could not open Obsidian.'));
+    await Linking.openURL(makeTranslationNote(current, settings).uri).catch(() => setNotice('Could not open Obsidian.'));
+  }
+
+  async function handleImportNotes() {
+    setNotesBusy(true);
+    try {
+      const imported = await importMarkdownNotes();
+      if (!imported.length) {
+        setNotice('No markdown notes were imported.');
+        return;
+      }
+
+      setNotes((items) => prependNotes(items, imported));
+      setSettings((state) => ({
+        ...state,
+        selectedNoteId: imported[0].id,
+      }));
+      setTab('notes');
+      setNotice(`Imported ${imported.length} note${imported.length > 1 ? 's' : ''}.`);
+    } catch (error) {
+      setNotice(error.message || 'Import failed.');
+    } finally {
+      setNotesBusy(false);
+    }
+  }
+
+  async function handleDeleteNote(note) {
+    await deleteImportedNote(note).catch(() => {});
+    setNotes((items) => items.filter((item) => item.id !== note.id));
+    if (settings.selectedNoteId === note.id) {
+      const nextNote = notes.find((item) => item.id !== note.id);
+      setSettings((state) => ({
+        ...state,
+        selectedNoteId: nextNote?.id || '',
+      }));
+    }
+  }
+
+  async function handlePickModel() {
+    setModelBusy(true);
+    try {
+      const model = await importLocalModelFile();
+      if (!model) {
+        setNotice('Model selection canceled.');
+        return;
+      }
+
+      setSettings((state) => ({
+        ...state,
+        llmModelUri: model.uri,
+        llmModelName: model.name,
+      }));
+
+      try {
+        const info = await inspectLocalModel(model.uri);
+        setModelInfo(info);
+      } catch (error) {
+        setModelInfo(null);
+        setNotice(error.message || 'Model imported. Inspect it from a native development build.');
+      }
+
+      setTab('ai');
+      setNotice(`Model ready: ${model.name}`);
+    } catch (error) {
+      setNotice(error.message || 'Model import failed.');
+    } finally {
+      setModelBusy(false);
+    }
+  }
+
+  async function handleRunAi() {
+    if (!settings.selectedNoteId) {
+      setTab('notes');
+      setNotice('Import and select an Obsidian note first.');
+      return;
+    }
+    if (!settings.llmModelUri) {
+      setNotice('Load a GGUF model first.');
+      return;
+    }
+
+    setAiBusy(true);
+    setAiOutput('');
+    try {
+      const result = await runLocalNoteAnalysis({
+        modelUri: settings.llmModelUri,
+        noteContent: selectedNoteContent,
+        instruction: aiPrompt,
+        n_ctx: settings.llmContextSize,
+        n_predict: settings.llmMaxTokens,
+        n_gpu_layers: settings.llmGpuLayers,
+        onStatus: setNotice,
+      });
+      setAiOutput(result.text || '');
+      if (result.wasTrimmed) {
+        setNotice(`Analysis complete. Note was truncated to ${result.usedChars} chars for on-device context.`);
+      } else {
+        setNotice('Analysis complete.');
+      }
+    } catch (error) {
+      setNotice(error.message || 'Local AI failed.');
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   if (!ready) {
@@ -110,8 +284,10 @@ export default function App() {
     );
   }
 
+  const localLlm = getLocalLlmStatus();
   const previewCode = current?.sourceCode || (settings.sourceLang === 'auto' ? LANGUAGES.ko.code : LANGUAGES[settings.sourceLang].code);
-  const pathPreview = current ? makeNote(current, settings).filePath : buildPathPreview(settings, previewCode);
+  const pathPreview = current ? makeTranslationNote(current, settings).filePath : buildPathPreview(settings, previewCode);
+  const selectedNote = notes.find((note) => note.id === settings.selectedNoteId) || null;
 
   return (
     <SafeAreaProvider>
@@ -120,9 +296,11 @@ export default function App() {
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
             <View style={[styles.card, styles.hero]}>
-              <Text style={[styles.kicker, styles.kickerDark]}>React Native translation workspace</Text>
+              <Text style={[styles.kicker, styles.kickerDark]}>Mobile translation + note intelligence</Text>
               <Text style={[styles.title, styles.titleDark]}>Polyglot</Text>
-              <Text style={styles.heroText}>Translate on mobile, keep a local history, and stage Obsidian notes with the same archive pattern as the other clients.</Text>
+              <Text style={styles.heroText}>
+                Import Obsidian markdown from the phone, keep your translation workspace, and run note analysis with an on-device GGUF model in a native build.
+              </Text>
               <Text style={styles.heroMeta}>WEB v{CLIENT_RELEASES.web}  |  EXT v{CLIENT_RELEASES.extension}  |  APP v{CLIENT.version}</Text>
             </View>
 
@@ -162,7 +340,7 @@ export default function App() {
                     {current.pronunciation ? <Text style={styles.pronunciation}>{current.targetKey === 'cn' ? 'Pinyin' : 'Romaji'}: {current.pronunciation}</Text> : null}
                     <View style={styles.row}>
                       <Action label="Copy text" tone="soft" onPress={() => copyText(current.translated, 'Translation')} />
-                      <Action label="Copy note" tone="soft" onPress={() => copyText(makeNote(current, settings).content, 'Note')} />
+                      <Action label="Copy note" tone="soft" onPress={() => copyText(makeTranslationNote(current, settings).content, 'Note')} />
                     </View>
                   </View>
                 ) : null}
@@ -170,9 +348,9 @@ export default function App() {
                 <View style={styles.card}>
                   <Text style={styles.label}>Obsidian note</Text>
                   <Text style={styles.path}>{pathPreview}</Text>
-                  {current ? <Text style={styles.note}>{makeNote(current, settings).content}</Text> : <Text style={styles.subtle}>Translate first to stage a full markdown note.</Text>}
+                  {current ? <Text style={styles.note}>{makeTranslationNote(current, settings).content}</Text> : <Text style={styles.subtle}>Translate first to stage a full markdown note.</Text>}
                   <View style={styles.row}>
-                    <Action label="Copy markdown" tone="soft" disabled={!current} onPress={() => copyText(makeNote(current, settings).content, 'Note')} />
+                    <Action label="Copy markdown" tone="soft" disabled={!current} onPress={() => copyText(makeTranslationNote(current, settings).content, 'Note')} />
                     <Action label="Share" tone="soft" disabled={!current} onPress={shareNote} />
                     <Action label="Open in Obsidian" tone="solid" disabled={!current} onPress={openObsidian} />
                   </View>
@@ -192,12 +370,98 @@ export default function App() {
                     <Text style={styles.historyResult}>{entry.translated}</Text>
                     <View style={styles.row}>
                       <Action label="Use" tone="soft" onPress={() => { setInput(entry.original); setCurrent(entry); setSettings((state) => ({ ...state, sourceLang: entry.requestedSourceKey || state.sourceLang, targetLang: entry.targetKey || state.targetLang })); setTab('translate'); }} />
-                      <Action label="Copy note" tone="soft" onPress={() => copyText(makeNote(entry, settings).content, 'Note')} />
+                      <Action label="Copy note" tone="soft" onPress={() => copyText(makeTranslationNote(entry, settings).content, 'Note')} />
                       <Action label="Delete" tone="ghost" onPress={() => { setHistory((items) => items.filter((item) => item.id !== entry.id)); if (current?.id === entry.id) setCurrent(null); }} />
                     </View>
                   </View>
                 ))}
               </View>
+            ) : null}
+
+            {tab === 'notes' ? (
+              <>
+                <View style={styles.card}>
+                  <View style={styles.split}>
+                    <Text style={styles.label}>Obsidian markdown</Text>
+                    <Action label={notesBusy ? 'Importing...' : 'Import .md'} tone="solid" disabled={notesBusy} onPress={handleImportNotes} />
+                  </View>
+                  <Text style={styles.subtle}>
+                    Pick markdown files from the phone. Obsidian notes are copied into the app sandbox so they can be reopened later.
+                  </Text>
+                </View>
+
+                <View style={styles.card}>
+                  <Text style={styles.label}>Imported notes ({notes.length})</Text>
+                  {!notes.length ? <Text style={styles.subtle}>No notes imported yet.</Text> : null}
+                  {notes.map((note) => (
+                    <View key={note.id} style={[styles.historyItem, settings.selectedNoteId === note.id && styles.selectedItem]}>
+                      <Text style={styles.historyTitle}>{note.name}</Text>
+                      <Text style={styles.subtle}>{stamp(note.importedAt)}  |  {formatBytes(note.size)}  |  {note.charCount} chars</Text>
+                      <Text style={styles.snippet}>{note.preview || '(empty note)'}</Text>
+                      <View style={styles.row}>
+                        <Action label="Open" tone="soft" onPress={() => setSettings((state) => ({ ...state, selectedNoteId: note.id }))} />
+                        <Action label="Copy" tone="soft" onPress={() => copyText(note.preview || note.name, 'Preview')} />
+                        <Action label="Delete" tone="ghost" onPress={() => handleDeleteNote(note)} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.card}>
+                  <Text style={styles.label}>Selected note</Text>
+                  {selectedNote ? (
+                    <>
+                      <Text style={styles.path}>{selectedNote.name}</Text>
+                      <Text style={styles.note}>{selectedNoteContent || '(empty note)'}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.subtle}>Select a note to preview its markdown.</Text>
+                  )}
+                </View>
+              </>
+            ) : null}
+
+            {tab === 'ai' ? (
+              <>
+                <View style={[styles.card, styles.dark]}>
+                  <Text style={[styles.label, styles.labelDark]}>Local model runtime</Text>
+                  <Text style={styles.darkLine}>{localLlm.reason}</Text>
+                  <Text style={styles.darkLine}>
+                    Current model: {settings.llmModelName || 'None loaded'}
+                  </Text>
+                  <View style={styles.row}>
+                    <Action label={modelBusy ? 'Loading...' : 'Load GGUF'} tone="soft" disabled={modelBusy} onPress={handlePickModel} />
+                    <Action label="Release model" tone="ghost" onPress={() => releaseLocalModel().then(() => setNotice('Local model released.')).catch(() => setNotice('Could not release the model.'))} />
+                  </View>
+                </View>
+
+                <View style={styles.card}>
+                  <Text style={styles.label}>Analysis target</Text>
+                  <Text style={styles.path}>{selectedNote ? selectedNote.name : 'No note selected'}</Text>
+                  <Text style={styles.subtle}>
+                    Best fit is a small GGUF instruct model in the 1B-3B range. The current flow is aimed at native development builds, not Expo Go or web.
+                  </Text>
+                  <TextInput value={aiPrompt} onChangeText={setAiPrompt} multiline textAlignVertical="top" style={styles.inputLarge} placeholder="Tell the local model what to do with the selected note." placeholderTextColor={COLORS.inkSoft} />
+                  <View style={styles.row}>
+                    <Action label={aiBusy ? 'Running...' : 'Run local AI'} tone="solid" disabled={aiBusy || !selectedNote} onPress={handleRunAi} />
+                    <Action label="Copy answer" tone="soft" disabled={!aiOutput} onPress={() => copyText(aiOutput, 'AI answer')} />
+                  </View>
+                </View>
+
+                {modelInfo ? (
+                  <View style={styles.card}>
+                    <Text style={styles.label}>Model info</Text>
+                    <Text style={styles.note}>{JSON.stringify(modelInfo, null, 2)}</Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.card}>
+                  <Text style={styles.label}>AI output</Text>
+                  <Text style={aiOutput ? styles.note : styles.subtle}>
+                    {aiOutput || 'Run the selected note through the local model to see the markdown answer here.'}
+                  </Text>
+                </View>
+              </>
             ) : null}
 
             {tab === 'settings' ? (
@@ -210,6 +474,16 @@ export default function App() {
                   <Text style={styles.label}>Archive folder mode</Text>
                   <View style={styles.row}>{ARCHIVE_LANGUAGE_OPTIONS.map((name) => <Chip key={name} label={name === 'auto' ? 'Auto' : name} active={settings.archiveLang === name} color={COLORS.sky} onPress={() => updateSetting('archiveLang', name)} />)}</View>
                   <Text style={styles.path}>{pathPreview}</Text>
+                </View>
+
+                <View style={styles.card}>
+                  <Text style={styles.label}>Local AI defaults</Text>
+                  <TextInput value={String(settings.llmContextSize)} onChangeText={(value) => updateSetting('llmContextSize', toSafeNumber(value, 2048))} keyboardType="numeric" style={styles.input} />
+                  <Text style={styles.subtle}>Context size tokens</Text>
+                  <TextInput value={String(settings.llmMaxTokens)} onChangeText={(value) => updateSetting('llmMaxTokens', toSafeNumber(value, 512))} keyboardType="numeric" style={styles.input} />
+                  <Text style={styles.subtle}>Max output tokens</Text>
+                  <TextInput value={String(settings.llmGpuLayers)} onChangeText={(value) => updateSetting('llmGpuLayers', toSafeNumber(value, 99))} keyboardType="numeric" style={styles.input} />
+                  <Text style={styles.subtle}>GPU layers to offload when supported</Text>
                 </View>
 
                 <View style={[styles.card, styles.dark]}>
@@ -227,7 +501,7 @@ export default function App() {
   );
 }
 
-function makeNote(entry, settings) {
+function makeTranslationNote(entry, settings) {
   return buildTranslationNote(settings, entry, { now: entry.createdAt, pageTitle: CLIENT.name, siteSlug: 'mobile-app' });
 }
 
@@ -238,6 +512,19 @@ function stamp(value) {
   const hh = String(date.getHours()).padStart(2, '0');
   const mm = String(date.getMinutes()).padStart(2, '0');
   return `${date.getFullYear()}-${month}-${day} ${hh}:${mm}`;
+}
+
+function formatBytes(value) {
+  const size = Number(value || 0);
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function toSafeNumber(value, fallback) {
+  const next = parseInt(String(value || ''), 10);
+  return Number.isFinite(next) && next > 0 ? next : fallback;
 }
 
 function Chip({ label, active, color, onPress }) {
@@ -265,21 +552,22 @@ const styles = StyleSheet.create({
   heroMeta: { color: '#f0c9bd', fontSize: 12, fontWeight: '700' },
   notice: { backgroundColor: COLORS.mintSoft, borderColor: COLORS.mint, borderWidth: 1, borderRadius: 18, padding: 14 },
   noticeText: { color: COLORS.ink, fontWeight: '600' },
-  tabs: { flexDirection: 'row', gap: 10 },
-  tab: { flex: 1, borderRadius: 999, paddingVertical: 12, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.lineStrong, alignItems: 'center' },
+  tabs: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  tab: { minWidth: 62, flexGrow: 1, borderRadius: 999, paddingVertical: 11, paddingHorizontal: 10, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.lineStrong, alignItems: 'center' },
   tabActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
-  tabText: { color: COLORS.ink, fontWeight: '700', textTransform: 'capitalize' },
+  tabText: { color: COLORS.ink, fontWeight: '700', textTransform: 'capitalize', fontSize: 12 },
   tabTextActive: { color: '#fff7ef' },
   label: { color: COLORS.ink, fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
   labelDark: { color: '#f0c9bd' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  split: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  split: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   link: { color: COLORS.accentStrong, fontWeight: '700' },
   chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: COLORS.lineStrong, backgroundColor: COLORS.canvas },
   chipText: { color: COLORS.ink, fontSize: 13, fontWeight: '700' },
   chipTextActive: { color: '#fff7ef' },
   editor: { minHeight: 170, borderRadius: 18, borderWidth: 1, borderColor: COLORS.lineStrong, backgroundColor: COLORS.canvas, padding: 14, color: COLORS.ink, fontSize: 16, lineHeight: 24 },
   input: { borderRadius: 18, borderWidth: 1, borderColor: COLORS.lineStrong, backgroundColor: COLORS.canvas, paddingHorizontal: 14, paddingVertical: 12, color: COLORS.ink, fontSize: 15 },
+  inputLarge: { minHeight: 120, borderRadius: 18, borderWidth: 1, borderColor: COLORS.lineStrong, backgroundColor: COLORS.canvas, paddingHorizontal: 14, paddingVertical: 12, color: COLORS.ink, fontSize: 15, lineHeight: 22 },
   action: { minWidth: 108, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 999, borderWidth: 1, alignItems: 'center' },
   actionSolid: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   actionSoft: { backgroundColor: COLORS.skySoft, borderColor: COLORS.sky },
@@ -294,6 +582,7 @@ const styles = StyleSheet.create({
   note: { backgroundColor: COLORS.cardStrong, color: '#f6eadf', borderRadius: 18, padding: 14, lineHeight: 20 },
   subtle: { color: COLORS.inkSoft, lineHeight: 20 },
   historyItem: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingTop: 16, gap: 8 },
+  selectedItem: { borderTopColor: COLORS.accent },
   historyTitle: { color: COLORS.ink, fontSize: 22, lineHeight: 26, fontFamily: FONT },
   snippet: { color: COLORS.inkSoft, lineHeight: 20 },
   historyResult: { color: COLORS.ink, lineHeight: 22, fontWeight: '600' },

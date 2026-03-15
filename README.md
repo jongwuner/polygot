@@ -59,6 +59,8 @@ The mobile client includes:
 - pronunciation support for Japanese and Chinese targets
 - local translation history with AsyncStorage
 - Obsidian note generation, markdown copy, share, and deep-link launch
+- markdown note import from Obsidian files on the phone
+- local GGUF model hookup for native on-device note analysis
 
 ## Web and extension
 
