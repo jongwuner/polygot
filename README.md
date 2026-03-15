@@ -1,221 +1,85 @@
 # Polyglot
 
-5개 국어 입력기 + 번역 Chrome Extension.
+Polyglot is a multi-client translation project with three active surfaces:
 
-한국어 · English · 日本語 · 中文 · Deutsch
+- a web editor for quick multilingual notes
+- a Chrome extension for translating page selections into Obsidian-ready notes
+- an Expo / React Native mobile app for translation, local history, and note staging
 
-## Live
+## Clients
 
-Firebase Hosting: [polyglot-f8ea5.web.app](https://polyglot-f8ea5.web.app)
+### Web client
 
-Version Notes: [CHANGELOG.md](CHANGELOG.md)
+- Location: `index.html`, `css/`, `js/`
+- Purpose: editor-first multilingual input workspace
+- Release notes: [`docs/release-notes/web.md`](docs/release-notes/web.md)
 
----
+### Chrome extension
 
-## Project Structure
+- Location: `chrome-extension/`
+- Purpose: translate selected page text and push notes into Obsidian
+- Release notes: [`docs/release-notes/chrome-extension.md`](docs/release-notes/chrome-extension.md)
 
-```
+### React Native mobile app
+
+- Location: `mobile/`
+- Purpose: mobile translation workspace with local history and Obsidian note preview
+- Release notes: [`docs/release-notes/mobile.md`](docs/release-notes/mobile.md)
+
+## Repository layout
+
+```text
 polygot/
-├── index.html                 ← Web app entry
-├── css/style.css              ← Styles
-├── js/
-│   ├── data/
-│   │   ├── romaji-kana.js     ← Romaji → Hiragana/Katakana mapping
-│   │   ├── pinyin-hanzi.js    ← Pinyin → Hanzi dictionary
-│   │   └── config.js          ← Tone system, UI config, hints
-│   ├── editor.js              ← Core editor logic + UI helpers
-│   ├── ime-japanese.js        ← Japanese IME handler
-│   ├── ime-chinese.js         ← Chinese IME handler
-│   └── app.js                 ← Init + event listeners
-├── chrome-extension/          ← Chrome Extension (MV3)
-│   ├── manifest.json
-│   ├── background.js          ← Translation API + shortcut handler
-│   ├── content.js             ← Text capture + floating panel
-│   ├── popup.html/css/js      ← Extension popup UI
-│   └── INSTALL.md             ← Setup guide
-├── firebase.json              ← Firebase Hosting config
-└── BACKLOG.md                 ← Roadmap
+|-- chrome-extension/
+|-- css/
+|-- docs/release-notes/
+|-- js/
+|   `-- data/
+|-- mobile/
+|   |-- App.js
+|   |-- app.json
+|   `-- src/
+|-- CHANGELOG.md
+|-- BACKLOG.md
+`-- index.html
 ```
 
----
+## Run the mobile app
 
-## Web App
-
-### Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Ctrl+1` | Switch to 한국어 |
-| `Ctrl+2` | Switch to English |
-| `Ctrl+3` | Switch to 日本語 |
-| `Ctrl+4` | Switch to 中文 |
-| `Ctrl+5` | Switch to Deutsch |
-
-### Korean (한국어)
-
-OS의 한/영 전환을 사용하여 입력합니다.
-
-- **Windows**: `한/영` 키 또는 `Right Alt`
-- **Mac**: `⌘+Space` 또는 `Caps Lock`
-
-Quick Insert 버튼으로 된소리(ㄲ,ㄸ,ㅃ,ㅆ,ㅉ)와 이중모음(ㅘ,ㅙ,ㅚ 등) 삽입 가능.
-
-### Japanese (日本語)
-
-로마자를 입력하면 자동으로 히라가나로 변환됩니다.
-
-| Input | Output | Note |
-|---|---|---|
-| `konnichiha` | こんにちは | 소문자 → 히라가나 |
-| `KONNICHIHA` | コンニチハ | 대문자 → 카타카나 |
-| `nn` / `n'` | ん | |
-| `kitte` | きって | 같은 자음 2개 → っ |
-| `thi` | てぃ | 외래어: ティー |
-| `fa` | ふぁ | 외래어: ファン |
-
-- `Enter`: 버퍼 확정
-- `Esc`: 버퍼 취소
-
-### Chinese (中文)
-
-핀인을 입력한 후 Space를 누르면 한자 후보가 표시됩니다.
-
-| Step | Example |
-|---|---|
-| 핀인 입력 | `nihao` |
-| 성조 추가 (선택) | `2` → `níhao` |
-| 성조 변경 | `3` → `nǐhao` |
-| 성조 제거 | `5` → `nihao` |
-| 한자 후보 표시 | `Space` |
-| 후보 선택 | `1`~`9` |
-| 핀인 그대로 확정 | `Enter` |
-
-- `v`를 입력하면 `ü`로 처리됩니다. (예: `nv3` → `nǚ`)
-
-### German (Deutsch)
-
-직접 입력합니다. 특수 문자는 Quick Insert 버튼 사용:
-
-`ä` `ö` `ü` `Ä` `Ö` `Ü` `ß` `€`
-
-### Toolbar
-
-- **Copy**: 텍스트를 클립보드에 복사
-- **Clear**: 현재 언어의 텍스트 초기화
-- **Path**: Obsidian 볼트/아카이브 경로 설정
-- **Save**: 확장과 같은 Obsidian 경로로 즉시 저장
-
----
-
-## Chrome Extension
-
-웹 브라우저에서 텍스트를 드래그하고 단축키를 누르면 번역 후 바로 Obsidian에 저장합니다.
-
-### Setup
-
-1. `chrome://extensions` → 개발자 모드 ON
-2. "압축해제된 확장 프로그램을 로드합니다" → `chrome-extension` 폴더 선택
-3. 확장 프로그램 아이콘 클릭 → 설정:
-   - **Vault Name**: Obsidian 볼트 이름 (예: `MyVault`)
-   - **Archive Base Path**: 아카이브 루트 경로 (예: `4. Archive`)
-
-### Usage
-
-**방법 1 — 드래그 (마우스)**
-1. 웹 페이지에서 텍스트 드래그
-2. 선택 영역 옆에 **Translate** 버튼이 나타남
-3. 클릭하면 번역 패널 표시 + Obsidian 즉시 저장
-
-**방법 2 — 우클릭**
-1. 텍스트 선택 후 우클릭
-2. **"Polyglot: Translate"** 메뉴 클릭
-
-**방법 3 — 단축키**
-1. 텍스트 선택 후 `Alt+T`
-2. 바로 번역 + Obsidian 저장 (단축키 변경: `chrome://extensions/shortcuts`)
-
-### Obsidian Archive 구조
-
-감지된 소스 언어 기준으로 자동 분류됩니다.
-
-```
-4. Archive/
-├── 영어/polygot/
-│   ├── 2026-03-14/
-│   │   ├── 2026-03-14_1430_bbc-com.md
-│   │   └── 2026-03-14_1545_github-com.md
-│   └── 2026-03-15/
-│       └── ...
-├── 일본어/polygot/
-│   └── 2026-03-14/
-│       └── 2026-03-14_2010_nhk-or-jp.md
-├── 중국어/polygot/
-│   └── ...
-└── 독일어/polygot/
-    └── ...
+```bash
+cd mobile
+npm install
+npm run start
 ```
 
-각 파일 내용:
+The mobile client includes:
 
-```markdown
-#### English → 한국어  |  2026-03-14 14:30
+- source and target language selection
+- Google Translate-backed translation requests
+- pronunciation support for Japanese and Chinese targets
+- local translation history with AsyncStorage
+- Obsidian note generation, markdown copy, share, and deep-link launch
 
-> The original selected text here
+## Web and extension
 
-번역된 텍스트
+The web client remains editor-first and the Chrome extension remains selection-first.
 
-*Source: [Page Title](https://example.com)*
-```
+- Open `index.html` directly or serve the repo root to work on the web client.
+- Load `chrome-extension/` as an unpacked MV3 extension from `chrome://extensions`.
 
-중국어/일본어 번역 시 발음 자동 포함:
+## Release notes
 
-```markdown
-#### English → 中文  |  2026-03-14 14:30
+Client-specific version notes now live in dedicated files:
 
-> hello world
+- [`CHANGELOG.md`](CHANGELOG.md)
+- [`docs/release-notes/web.md`](docs/release-notes/web.md)
+- [`docs/release-notes/chrome-extension.md`](docs/release-notes/chrome-extension.md)
+- [`docs/release-notes/mobile.md`](docs/release-notes/mobile.md)
 
-你好世界
+## Deploy
 
-*Pinyin: nǐ hǎo shìjiè*
-
-*Source: [Page Title](https://example.com)*
-```
-
-저녁 cron이 이 폴더를 읽어서 복습노트에 반영합니다.
-
-### Popup Quick Translate
-
-확장 프로그램 아이콘을 클릭하면 팝업에서 직접 번역하고 바로 Obsidian에 보낼 수 있습니다.
-
-### Requirements
-
-- Obsidian 데스크톱 앱 설치 필요
-- 처음 사용 시 Chrome에서 `obsidian://` 링크 열기 허용
-
----
-
-## Development
-
-### Modify Guide
-
-| What to change | File |
-|---|---|
-| Styling | `css/style.css` |
-| Hanzi dictionary | `js/data/pinyin-hanzi.js` |
-| Romaji→Kana map | `js/data/romaji-kana.js` |
-| Language config / hints | `js/data/config.js` |
-| Japanese IME logic | `js/ime-japanese.js` |
-| Chinese IME logic | `js/ime-chinese.js` |
-| Editor core | `js/editor.js` |
-| HTML layout | `index.html` |
-| Extension | `chrome-extension/` |
-
-### Deploy
+The web client is deployed through Firebase Hosting:
 
 ```bash
 firebase deploy
 ```
-
----
-
-Copyright Grady Lee.

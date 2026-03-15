@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Polyglot",
+    "slug": "polyglot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "polyglot",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gradylee.polyglot"
+    },
+    "android": {
+      "package": "com.gradylee.polyglot",
+      "adaptiveIcon": {
+        "backgroundColor": "#1f1d1a"
+      }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
