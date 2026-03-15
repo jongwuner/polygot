@@ -34,7 +34,7 @@ export const LANGUAGES = {
   auto: {
     key: 'auto',
     code: 'auto',
-    label: 'Auto Detect',
+    label: '자동 감지',
     short: 'AUTO',
     folder: 'Auto',
     accent: COLORS.amber,
@@ -42,7 +42,7 @@ export const LANGUAGES = {
   ko: {
     key: 'ko',
     code: 'ko',
-    label: 'Korean',
+    label: '한국어',
     short: 'KO',
     folder: 'Korean',
     accent: COLORS.mint,
@@ -50,7 +50,7 @@ export const LANGUAGES = {
   en: {
     key: 'en',
     code: 'en',
-    label: 'English',
+    label: '영어',
     short: 'EN',
     folder: 'English',
     accent: COLORS.accent,
@@ -58,7 +58,7 @@ export const LANGUAGES = {
   jp: {
     key: 'jp',
     code: 'ja',
-    label: 'Japanese',
+    label: '일본어',
     short: 'JA',
     folder: 'Japanese',
     accent: '#6a4fc2',
@@ -66,7 +66,7 @@ export const LANGUAGES = {
   cn: {
     key: 'cn',
     code: 'zh-CN',
-    label: 'Chinese',
+    label: '중국어',
     short: 'ZH',
     folder: 'Chinese',
     accent: '#8c6d12',
@@ -74,7 +74,7 @@ export const LANGUAGES = {
   de: {
     key: 'de',
     code: 'de',
-    label: 'German',
+    label: '독일어',
     short: 'DE',
     folder: 'German',
     accent: COLORS.sky,
@@ -84,6 +84,14 @@ export const LANGUAGES = {
 export const SOURCE_LANGUAGE_OPTIONS = ['auto', 'ko', 'en', 'jp', 'cn', 'de'];
 export const TARGET_LANGUAGE_OPTIONS = ['ko', 'en', 'jp', 'cn', 'de'];
 export const ARCHIVE_LANGUAGE_OPTIONS = ['auto', 'Korean', 'English', 'Japanese', 'Chinese', 'German'];
+export const ARCHIVE_LANGUAGE_LABELS = {
+  auto: '자동',
+  Korean: '한국어',
+  English: '영어',
+  Japanese: '일본어',
+  Chinese: '중국어',
+  German: '독일어',
+};
 
 export const STORAGE_KEYS = {
   settings: 'polyglot_mobile_settings',
@@ -109,9 +117,9 @@ export const HISTORY_LIMIT = 50;
 export const NOTE_LIMIT = 20;
 export const MAX_NOTE_CHARS_FOR_LLM = 6000;
 export const DEFAULT_AI_PROMPT =
-  'Summarize this Obsidian note, extract action items, and answer in concise markdown.';
+  '이 Obsidian 노트를 요약하고, 실행할 일을 뽑아 짧은 마크다운으로 정리해줘.';
 export const DEFAULT_QUIZ_PROMPT =
-  'Create a playful review quiz from this note with short recall, cloze, and challenge questions.';
+  '이 노트로 짧은 회상형, 빈칸형, 도전형 문제가 섞인 재밌는 복습 퀴즈를 만들어줘.';
 
 export const INPUT_PLACEHOLDER =
-  'Paste or type text here. Translate it, then stage an Obsidian-ready note.';
+  '여기에 문장을 붙여 넣거나 입력하세요. 번역한 뒤 Obsidian 노트로 바로 정리할 수 있어요.';

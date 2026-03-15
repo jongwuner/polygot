@@ -3,14 +3,16 @@ const STOPWORDS = new Set([
   'will', 'were', 'what', 'when', 'where', 'which', 'about', 'there', 'their',
   'then', 'than', 'into', 'while', 'because', 'also', 'just', 'like', 'been',
   'note', 'markdown', 'obsidian', 'https', 'http',
+  '그리고', '하지만', '그래서', '대한', '정리', '복습', '노트', '메모', '내용', '관련',
+  '사용', '기반', '이번', '다음', '먼저', '계속', '정도',
 ]);
 
 const TYPE_LABEL = {
-  cloze: 'Cloze Sprint',
-  recall: 'Recall Round',
-  heading: 'Boss Round',
-  quote: 'Echo Check',
-  term: 'Term Duel',
+  cloze: '빈칸 스프린트',
+  recall: '핵심 회상',
+  heading: '보스 라운드',
+  quote: '한 줄 체크',
+  term: '용어 매치',
 };
 
 export function buildQuizDeck(note, noteContent) {
@@ -29,9 +31,9 @@ export function buildQuizDeck(note, noteContent) {
     if (!term) continue;
     pushCard(cards, seen, {
       type: 'term',
-      prompt: `In ${displayNoteName(note)}, what is "${term}" about?`,
+      prompt: `${displayNoteName(note)}에서 "${term}"은 무엇을 뜻할까요?`,
       answer: stripMarkdown(line),
-      hint: 'Look for the emphasized term in the note.',
+      hint: '노트에서 강조된 용어를 먼저 떠올려 보세요.',
       source: line,
     });
   }
@@ -43,9 +45,9 @@ export function buildQuizDeck(note, noteContent) {
     if (!keyword) continue;
     pushCard(cards, seen, {
       type: 'cloze',
-      prompt: `Fill the missing idea:\n${blankKeyword(stripped, keyword)}`,
+      prompt: `빈칸을 채워 보세요.\n${blankKeyword(stripped, keyword)}`,
       answer: keyword,
-      hint: 'It is one of the strongest content words in the line.',
+      hint: '문장에서 가장 핵심적인 단어 하나를 가린 문제예요.',
       source: stripped,
     });
   }
@@ -56,9 +58,9 @@ export function buildQuizDeck(note, noteContent) {
     if (!heading || !detail) continue;
     pushCard(cards, seen, {
       type: 'heading',
-      prompt: `Boss round: what should you remember from "${heading}"?`,
+      prompt: `보스 라운드: "${heading}"에서 꼭 기억해야 할 한 가지는 무엇일까요?`,
       answer: stripMarkdown(detail),
-      hint: 'Summarize the first strong line under that heading.',
+      hint: '해당 제목 아래 첫 핵심 문장을 떠올려 보세요.',
       source: detail,
     });
   }
@@ -68,9 +70,9 @@ export function buildQuizDeck(note, noteContent) {
     if (stripped.length < 18) continue;
     pushCard(cards, seen, {
       type: 'quote',
-      prompt: `Echo check: why does this line matter?\n"${stripped}"`,
+      prompt: `한 줄 체크: 이 문장이 왜 중요할까요?\n"${stripped}"`,
       answer: stripped,
-      hint: "Try to connect the quote to the note's main idea.",
+      hint: '이 문장을 노트의 핵심 주제와 연결해 보세요.',
       source: stripped,
     });
   }
@@ -82,9 +84,9 @@ export function buildQuizDeck(note, noteContent) {
     if (!keyword) continue;
     pushCard(cards, seen, {
       type: 'recall',
-      prompt: `Recall round: explain this idea in your own words.\nCue: ${keyword}`,
+      prompt: `회상 라운드: 이 개념을 내 말로 설명해 보세요.\n단서: ${keyword}`,
       answer: stripped,
-      hint: 'Use the cue to reconstruct the full point.',
+      hint: '단서를 바탕으로 원문 핵심을 복원해 보세요.',
       source: stripped,
     });
   }
@@ -92,7 +94,7 @@ export function buildQuizDeck(note, noteContent) {
   const deck = shuffle(cards).slice(0, 10).map((card, index) => ({
     ...card,
     id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-    title: TYPE_LABEL[card.type] || 'Review Card',
+    title: TYPE_LABEL[card.type] || '복습 카드',
   }));
 
   if (!deck.length) {
@@ -101,9 +103,9 @@ export function buildQuizDeck(note, noteContent) {
         id: `${Date.now()}-fallback`,
         type: 'recall',
         title: TYPE_LABEL.recall,
-        prompt: `What is the main idea of ${displayNoteName(note)}?`,
-        answer: stripMarkdown(cleanContent.slice(0, 260)) || 'This note needs more text before a quiz can be generated.',
-        hint: 'Summarize the core message in one or two lines.',
+        prompt: `${displayNoteName(note)}의 핵심은 무엇인가요?`,
+        answer: stripMarkdown(cleanContent.slice(0, 260)) || '퀴즈를 만들려면 노트에 조금 더 내용이 필요해요.',
+        hint: '핵심 메시지를 1~2문장으로 정리해 보세요.',
         source: stripMarkdown(cleanContent.slice(0, 260)),
       },
     ];
@@ -121,7 +123,7 @@ export function mergeQuizDecks(baseDeck, aiDeck) {
     seen.add(key);
     merged.push({
       ...entry,
-      title: entry.title || TYPE_LABEL[entry.type] || 'Review Card',
+      title: entry.title || TYPE_LABEL[entry.type] || '복습 카드',
     });
   }
   return merged.slice(0, 12);
@@ -138,7 +140,7 @@ export function normalizeQuizDeck(input) {
       return {
         id: item?.id || `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
         type,
-        title: TYPE_LABEL[type] || 'Review Card',
+        title: TYPE_LABEL[type] || '복습 카드',
         prompt,
         answer,
         hint: String(item?.hint || '').trim(),
@@ -181,7 +183,10 @@ function stripMarkdown(value) {
 
 function blankKeyword(text, keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(new RegExp(`\\b${escaped}\\b`, 'i'), '_____');
+  const pattern = /^[a-z0-9-]+$/i.test(keyword)
+    ? new RegExp(`\\b${escaped}\\b`, 'i')
+    : new RegExp(escaped, 'i');
+  return text.replace(pattern, '_____');
 }
 
 function pickKeyword(text) {
@@ -202,7 +207,7 @@ function pushCard(cards, seen, card) {
 }
 
 function displayNoteName(note) {
-  return note?.name ? `"${note.name}"` : 'this note';
+  return note?.name ? `"${note.name}"` : '이 노트';
 }
 
 function shuffle(items) {

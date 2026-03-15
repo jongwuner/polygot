@@ -9,23 +9,23 @@ const CODE_TO_LABEL = {
   'zh-CN': LANGUAGES.cn.label,
   'zh-TW': LANGUAGES.cn.label,
   de: LANGUAGES.de.label,
-  fr: 'French',
-  es: 'Spanish',
-  pt: 'Portuguese',
-  ru: 'Russian',
-  it: 'Italian',
-  ar: 'Arabic',
+  fr: '프랑스어',
+  es: '스페인어',
+  pt: '포르투갈어',
+  ru: '러시아어',
+  it: '이탈리아어',
+  ar: '아랍어',
 };
 
 export async function translateText(text, targetKey, sourceKey = 'auto') {
   const cleanText = String(text || '').trim();
   if (!cleanText) {
-    throw new Error('Enter text to translate.');
+    throw new Error('번역할 문장을 먼저 입력해 주세요.');
   }
 
   const target = LANGUAGES[targetKey];
   if (!target || targetKey === 'auto') {
-    throw new Error('Choose a target language.');
+    throw new Error('번역할 언어를 선택해 주세요.');
   }
 
   const source = sourceKey === 'auto' ? LANGUAGES.auto : LANGUAGES[sourceKey];
@@ -37,7 +37,7 @@ export async function translateText(text, targetKey, sourceKey = 'auto') {
 
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Translation API error: ${response.status}`);
+    throw new Error(`번역 API 호출에 실패했어요. (${response.status})`);
   }
 
   const data = await response.json();
@@ -52,7 +52,7 @@ export async function translateText(text, targetKey, sourceKey = 'auto') {
   }
 
   if (!translated) {
-    throw new Error('Translation returned an empty response.');
+    throw new Error('번역 결과가 비어 있어요.');
   }
 
   const detectedCode = data[2] || source?.code || 'unknown';

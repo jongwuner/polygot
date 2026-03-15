@@ -77,7 +77,7 @@ export async function deleteImportedNote(note) {
 
 export async function importLocalModelFile() {
   if (Platform.OS === 'web') {
-    throw new Error('Local GGUF models are only available in a native build.');
+    throw new Error('로컬 GGUF 모델은 네이티브 빌드에서만 사용할 수 있어요.');
   }
 
   const result = await DocumentPicker.getDocumentAsync({
@@ -113,7 +113,7 @@ function buildNoteMetadata(asset, localUri, content) {
   const text = String(content || '');
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    name: asset.name || 'Untitled.md',
+    name: asset.name || '제목없음.md',
     localUri,
     importedAt: new Date().toISOString(),
     size: asset.size || text.length,

@@ -11,14 +11,14 @@ export function getLocalLlmStatus() {
     return {
       available: false,
       mode: 'web',
-      reason: 'Web cannot load the native local model runtime.',
+      reason: '웹에서는 네이티브 로컬 모델 런타임을 불러올 수 없어요.',
     };
   }
 
   return {
     available: true,
     mode: 'native',
-    reason: 'Requires a development build with React Native New Architecture.',
+    reason: 'React Native New Architecture 기반 개발 빌드가 필요해요.',
   };
 }
 
@@ -37,12 +37,12 @@ export async function runLocalNoteAnalysis({
   onStatus,
 }) {
   if (!modelUri) {
-    throw new Error('Select a GGUF model first.');
+    throw new Error('먼저 GGUF 모델을 불러와 주세요.');
   }
 
   const cleanNote = String(noteContent || '').trim();
   if (!cleanNote) {
-    throw new Error('Import and select an Obsidian note first.');
+    throw new Error('먼저 Obsidian 노트를 가져오고 선택해 주세요.');
   }
 
   const llama = await getLlamaModule();
@@ -54,7 +54,7 @@ export async function runLocalNoteAnalysis({
   }
 
   if (!cachedContext) {
-    onStatus?.('Loading model...');
+    onStatus?.('모델을 불러오는 중...');
     cachedContext = await llama.initLlama(
       {
         model: modelUri,
@@ -63,13 +63,13 @@ export async function runLocalNoteAnalysis({
         n_gpu_layers,
       },
       (progress) => {
-        onStatus?.(`Loading model ${Math.round(progress * 100)}%`);
+        onStatus?.(`모델 로딩 ${Math.round(progress * 100)}%`);
       }
     );
     cachedModelUri = modelUri;
   }
 
-  onStatus?.('Generating answer...');
+  onStatus?.('답변을 생성하는 중...');
 
   const { prompt, wasTrimmed } = buildNotePrompt(cleanNote, instruction);
   let streamedText = '';
@@ -80,7 +80,7 @@ export async function runLocalNoteAnalysis({
         {
           role: 'system',
           content:
-            'You are an on-device Obsidian note assistant. Reply in concise markdown with sections when useful.',
+            '너는 온디바이스 Obsidian 노트 도우미야. 필요한 경우 섹션을 나눠 간결한 한국어 마크다운으로 답변해.',
         },
         {
           role: 'user',
@@ -116,19 +116,19 @@ export async function generateLocalQuizDeck({
   onStatus,
 }) {
   if (!modelUri) {
-    throw new Error('Select a GGUF model first.');
+    throw new Error('먼저 GGUF 모델을 불러와 주세요.');
   }
 
   const cleanNote = String(noteContent || '').trim();
   if (!cleanNote) {
-    throw new Error('Select a note first.');
+    throw new Error('먼저 노트를 선택해 주세요.');
   }
 
   const llama = await getLlamaModule();
   const context = await getOrCreateContext(llama, modelUri, { n_ctx, n_gpu_layers }, onStatus);
   const { prompt } = buildNotePrompt(cleanNote, instruction);
 
-  onStatus?.('Generating quiz cards...');
+  onStatus?.('퀴즈 카드를 만드는 중...');
 
   const schema = {
     type: 'object',
@@ -158,11 +158,11 @@ export async function generateLocalQuizDeck({
       {
         role: 'system',
         content:
-          'Create a fun review quiz from the provided Obsidian note. Use short prompts, keep answers concise, and mix cloze, recall, and boss-round cards.',
+          '주어진 Obsidian 노트를 바탕으로 재밌는 복습 퀴즈를 만들어. 짧은 질문을 쓰고, 답은 간결하게 유지하고, 빈칸형·회상형·보스형 카드를 섞어 줘.',
       },
       {
         role: 'user',
-        content: `Note name: ${noteName || 'Imported note'}\n\n${prompt}`,
+        content: `노트 이름: ${noteName || '가져온 노트'}\n\n${prompt}`,
       },
     ],
     response_format: {
@@ -180,7 +180,7 @@ export async function generateLocalQuizDeck({
   const deck = normalizeQuizDeck(parsed?.quiz);
 
   if (!deck.length) {
-    throw new Error('The local model did not return usable quiz cards.');
+    throw new Error('로컬 모델이 사용할 수 있는 퀴즈 카드를 돌려주지 않았어요.');
   }
 
   return deck;
@@ -196,13 +196,13 @@ export async function releaseLocalModel() {
 
 async function getLlamaModule() {
   if (Platform.OS === 'web') {
-    throw new Error('Local LLM requires an iOS or Android development build.');
+    throw new Error('로컬 LLM은 iOS 또는 Android 개발 빌드에서만 실행돼요.');
   }
 
   try {
     return await import('llama.rn');
   } catch (error) {
-    throw new Error('Local LLM runtime is unavailable. Build a native development client first.');
+    throw new Error('로컬 LLM 런타임을 찾을 수 없어요. 먼저 네이티브 개발 클라이언트를 빌드해 주세요.');
   }
 }
 
@@ -214,7 +214,7 @@ async function getOrCreateContext(llama, modelUri, { n_ctx, n_gpu_layers }, onSt
   }
 
   if (!cachedContext) {
-    onStatus?.('Loading model...');
+    onStatus?.('모델을 불러오는 중...');
     cachedContext = await llama.initLlama(
       {
         model: modelUri,
@@ -223,7 +223,7 @@ async function getOrCreateContext(llama, modelUri, { n_ctx, n_gpu_layers }, onSt
         n_gpu_layers,
       },
       (progress) => {
-        onStatus?.(`Loading model ${Math.round(progress * 100)}%`);
+        onStatus?.(`모델 로딩 ${Math.round(progress * 100)}%`);
       }
     );
     cachedModelUri = modelUri;
@@ -238,13 +238,13 @@ function buildNotePrompt(noteContent, instruction) {
   const wasTrimmed = noteContent.length > MAX_NOTE_CHARS_FOR_LLM;
 
   const prompt = [
-    `Instruction: ${cleanInstruction}`,
+    `지시: ${cleanInstruction}`,
     '',
     wasTrimmed
-      ? `The note was truncated to the first ${MAX_NOTE_CHARS_FOR_LLM} characters to fit on-device context.`
-      : 'The full note is included below.',
+      ? `온디바이스 컨텍스트에 맞추기 위해 노트 앞 ${MAX_NOTE_CHARS_FOR_LLM}자까지만 사용했어요.`
+      : '노트 전체를 아래에 포함했어요.',
     '',
-    'Obsidian note:',
+    'Obsidian 노트:',
     limitedNote,
   ].join('\n');
 

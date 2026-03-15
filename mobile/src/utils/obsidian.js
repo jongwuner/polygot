@@ -50,7 +50,7 @@ export function buildTranslationMarkdown(data, context = {}) {
   const original = String(data?.original || '').trim();
   const translated = String(data?.translated || '').trim();
   const lines = [
-    `#### ${data?.sourceLang || 'Unknown'} -> ${data?.targetLang || 'Unknown'} | ${dateParts.date} ${dateParts.time}`,
+    `#### ${data?.sourceLang || '알 수 없음'} -> ${data?.targetLang || '알 수 없음'} | ${dateParts.date} ${dateParts.time}`,
     '',
     `> ${original.replace(/\n/g, '\n> ')}`,
     '',
@@ -58,7 +58,7 @@ export function buildTranslationMarkdown(data, context = {}) {
   ];
 
   if (data?.pronunciation) {
-    const label = data.targetKey === 'cn' ? 'Pinyin' : 'Romaji';
+    const label = data.targetKey === 'cn' ? '병음' : '로마자';
     lines.push('', `*${label}: ${data.pronunciation}*`);
   }
 
@@ -71,7 +71,7 @@ export function buildPathPreview(settings, sourceCode = 'ko') {
     settings,
     {
       sourceCode,
-      sourceLang: SOURCE_LANG_FOLDER[sourceCode] || 'Archive',
+      sourceLang: SOURCE_LANG_FOLDER[sourceCode] || '보관함',
     },
     {
       now: new Date('2026-03-15T14:30:00'),
@@ -93,15 +93,15 @@ function buildObsidianUri(vaultName, filePath, content) {
 
 function buildSourceLine(pageTitle, pageUrl) {
   if (pageTitle && pageUrl) {
-    return `*Source: [${pageTitle}](${pageUrl})*`;
+    return `*출처: [${pageTitle}](${pageUrl})*`;
   }
   if (pageTitle) {
-    return `*Source: ${pageTitle}*`;
+    return `*출처: ${pageTitle}*`;
   }
   if (pageUrl) {
-    return `*Source: ${pageUrl}*`;
+    return `*출처: ${pageUrl}*`;
   }
-  return '*Source: Polyglot Mobile*';
+  return '*출처: Polygot Mobile*';
 }
 
 function resolveLangFolder(data, archiveLang) {

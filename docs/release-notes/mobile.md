@@ -6,6 +6,8 @@
 - Added note-only quiz deck generation that turns headings, bullets, quotes, and key terms into short review cards.
 - Added optional local-model quiz remix using the imported GGUF model on native development builds.
 - Added session scoring, streak tracking, and XP-style progress for repeat review loops.
+- Shifted the mobile app to a Korean-first UI with localized labels, notices, and guidance copy.
+- Improved quiz generation so Korean notes produce better cloze prompts.
 
 ## v1.1.0 - 2026-03-15
 
